@@ -1,5 +1,5 @@
 ---
-abstract: 'An extension to Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.'
+abstract: 'An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.'
 author:
   - 'Lucas Theisen <lucastheisen@pastdev.com>'
 build_requires: {}
@@ -14,4 +14,4 @@ meta-spec:
 name: IPC-Open3-Callback
 requires:
   IPC::Open3: 0
-version: 1.00_02
+version: 1.00_03

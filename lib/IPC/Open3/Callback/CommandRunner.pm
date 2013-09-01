@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::CommandRunner;
 {
-  $IPC::Open3::Callback::CommandRunner::VERSION = '1.00_02';
+  $IPC::Open3::Callback::CommandRunner::VERSION = '1.00_03';
 }
 
 use strict;
@@ -102,13 +102,11 @@ sub run_or_die {
 __END__
 =head1 NAME
 
+IPC::Open3::Callback::CommandRunner - A utility class that wraps IPC::Open3::Callback with available output buffers and an option to die on failure instead of returning exit code.
 
 =head1 VERSION
 
-version 1.00_02
-IPC::Open3::Callback::CommandRunner - A utility class that wraps 
-IPC::Open3::Callback with available output buffers and an option to die on
-failure instead of returning exit code.
+version 1.00_03
 
 =head1 SYNOPSIS
 
@@ -128,3 +126,66 @@ failure instead of returning exit code.
 
 Adds more convenience to IPC::Open3::Callback by buffering output and error
 if needed and dieing on failure if wanted.
+
+=head1 CONSTRUCTOR
+
+=head2 new()
+
+The constructor creates a new CommandRunner.
+
+=head1 METHODS
+
+=head2 err_buffer()
+
+Returns the contents of the err_buffer from the last call to 
+L<run|/"run( $command, $arg1, ..., $argN, \%options )"> or 
+L<run_or_die|/"run_or_die( $command, $arg1, ..., $argN, \%options )">.
+
+=head2 out_buffer()
+
+Returns the contents of the err_buffer from the last call to 
+L<run|/"run( $command, $arg1, ..., $argN, \%options )"> or 
+L<run_or_die|/"run_or_die( $command, $arg1, ..., $argN, \%options )">.
+
+=head2 run( $command, $arg1, ..., $argN, \%options )
+
+Will run the specified command with the supplied arguments by passing them on to 
+L<run_command|IPC::Open3::Callback/"run_command( $command, $arg1, ..., $argN, \%options )">.  
+Arguments can be embedded in the command string and are thus optional.
+
+If the last argument to this method is a hashref (C<ref(@_[-1]) eq 'HASH'>), then
+it is treated as an options hash.  The supported allowed options are the same as 
+L<run_command|IPC::Open3::Callback/"run_command( $command, $arg1, ..., $argN, \%options )"> 
+plus:
+
+=over 4
+
+=item out_buffer
+
+If true, a callback will be generated for C<STDOUT> that buffers all data 
+and can be accessed via L<out_buffer()|/"out_buffer()">
+
+=item err_buffer
+
+If true, a callback will be generated for C<STDERR> that buffers all data 
+and can be accessed via L<err_buffer()|/"err_buffer()">
+
+=back
+
+Returns the exit code from the command.
+
+=head2 run_or_die( $command, $arg1, ..., $argN, \%options )
+
+The same as L<run|/"run( $command, $arg1, ..., $argN, \%options )"> exept that it
+will C<die> on a non-zero exit code instead of returning the exit code.
+
+=head1 AUTHOR
+
+Lucas Theisen (lucastheisen@pastdev.com)
+
+=head1 COPYRIGHT
+
+Copyright 2013 pastdev.com.  All rights reserved.
+
+This library is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.
