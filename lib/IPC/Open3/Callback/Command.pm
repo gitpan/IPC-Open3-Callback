@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::Command;
 {
-  $IPC::Open3::Callback::Command::VERSION = '1.00_01';
+  $IPC::Open3::Callback::Command::VERSION = '1.00_02';
 }
 
 use strict;
@@ -131,7 +131,7 @@ __END__
 
 =head1 VERSION
 
-version 1.00_01
+version 1.00_02
 IPC::Open3::Callback::Command - A utility class that provides subroutines for
 building shell command strings.
 

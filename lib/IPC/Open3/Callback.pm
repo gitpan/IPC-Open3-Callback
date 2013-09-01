@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::NullLogger;
 {
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.00_01';
+  $IPC::Open3::Callback::NullLogger::VERSION = '1.00_02';
 }
 
 use AutoLoader;
@@ -22,7 +22,7 @@ no AutoLoader;
 
 package IPC::Open3::Callback;
 {
-  $IPC::Open3::Callback::VERSION = '1.00_01';
+  $IPC::Open3::Callback::VERSION = '1.00_02';
 }
 
 use strict;
@@ -203,12 +203,11 @@ sub write_to_callback {
 __END__
 =head1 NAME
 
+IPC::Open3::Callback - An extension to Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 
 =head1 VERSION
 
-version 1.00_01
-IPC::Open3::Callback - An extension to Open3 that will feed out and err to
-callbacks instead of requiring the caller to handle them.
+version 1.00_02
 
 =head1 SYNOPSIS
 

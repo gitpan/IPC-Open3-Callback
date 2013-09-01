@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::CommandRunner;
 {
-  $IPC::Open3::Callback::CommandRunner::VERSION = '1.00_01';
+  $IPC::Open3::Callback::CommandRunner::VERSION = '1.00_02';
 }
 
 use strict;
@@ -105,7 +105,7 @@ __END__
 
 =head1 VERSION
 
-version 1.00_01
+version 1.00_02
 IPC::Open3::Callback::CommandRunner - A utility class that wraps 
 IPC::Open3::Callback with available output buffers and an option to die on
 failure instead of returning exit code.
