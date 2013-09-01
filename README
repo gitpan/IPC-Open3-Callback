@@ -1,0 +1,14 @@
+
+
+This archive contains the distribution IPC-Open3-Callback,
+version 1.00_01:
+
+  An extension to Open3 that will feed out and err to
+callbacks instead of requiring the caller to handle them.
+
+This software is copyright (c) 2013 by Lucas Theisen.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+
