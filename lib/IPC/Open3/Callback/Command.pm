@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::Command;
 {
-  $IPC::Open3::Callback::Command::VERSION = '1.00_03';
+  $IPC::Open3::Callback::Command::VERSION = '1.01';
 }
 
 use strict;
@@ -132,7 +132,7 @@ IPC::Open3::Callback::Command - A utility class that provides subroutines for bu
 
 =head1 VERSION
 
-version 1.00_03
+version 1.01
 
 =head1 SYNOPSIS
 

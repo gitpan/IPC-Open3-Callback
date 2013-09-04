@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::NullLogger;
 {
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.00_03';
+  $IPC::Open3::Callback::NullLogger::VERSION = '1.01';
 }
 
 use AutoLoader;
@@ -22,7 +22,7 @@ no AutoLoader;
 
 package IPC::Open3::Callback;
 {
-  $IPC::Open3::Callback::VERSION = '1.00_03';
+  $IPC::Open3::Callback::VERSION = '1.01';
 }
 
 use strict;
@@ -207,7 +207,7 @@ IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to 
 
 =head1 VERSION
 
-version 1.00_03
+version 1.01
 
 =head1 SYNOPSIS
 

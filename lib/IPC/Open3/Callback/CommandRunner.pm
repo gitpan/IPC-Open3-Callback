@@ -2,7 +2,7 @@
 
 package IPC::Open3::Callback::CommandRunner;
 {
-  $IPC::Open3::Callback::CommandRunner::VERSION = '1.00_03';
+  $IPC::Open3::Callback::CommandRunner::VERSION = '1.01';
 }
 
 use strict;
@@ -106,7 +106,7 @@ IPC::Open3::Callback::CommandRunner - A utility class that wraps IPC::Open3::Cal
 
 =head1 VERSION
 
-version 1.00_03
+version 1.01
 
 =head1 SYNOPSIS
 
