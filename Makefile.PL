@@ -10,7 +10,7 @@ use ExtUtils::MakeMaker 6.30;
 
 my %WriteMakefileArgs = (
   "ABSTRACT" => "An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.",
-  "AUTHOR" => "Lucas Theisen <lucastheisen\@pastdev.com>",
+  "AUTHOR" => "Lucas Theisen <lucastheisen\@pastdev.com>, Alceu Rodrigues de Freitas Junior <arfreitas\@cpan.org>",
   "BUILD_REQUIRES" => {},
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => "6.30"
@@ -23,7 +23,7 @@ my %WriteMakefileArgs = (
     "IPC::Open3" => 0
   },
   "TEST_REQUIRES" => {},
-  "VERSION" => "1.01",
+  "VERSION" => "1.02",
   "test" => {
     "TESTS" => "t/*.t"
   }

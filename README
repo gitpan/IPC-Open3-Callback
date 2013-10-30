@@ -1,7 +1,7 @@
 
 
 This archive contains the distribution IPC-Open3-Callback,
-version 1.01:
+version 1.02:
 
   An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 

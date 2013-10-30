@@ -1,41 +1,42 @@
 #!/usr/local/bin/perl
 
-package IPC::Open3::Callback::CommandRunner;
-{
-  $IPC::Open3::Callback::CommandRunner::VERSION = '1.01';
-}
-
 use strict;
 use warnings;
 
+package IPC::Open3::Callback::CommandRunner;
+{
+  $IPC::Open3::Callback::CommandRunner::VERSION = '1.02';
+}
+
+use Hash::Util qw(lock_keys);
 use IPC::Open3::Callback;
 
 sub new {
     my $prototype = shift;
-    my $class = ref( $prototype ) || $prototype;
-    my $self = {};
+    my $class     = ref($prototype) || $prototype;
+    my $self      = { command_runner => IPC::Open3::Callback->new(), };
     bless( $self, $class );
 
-    $self->{command_runner} = IPC::Open3::Callback->new();
+    lock_keys( %{$self}, keys( %{$self} ), 'out_buffer', 'err_buffer' );
 
-    return $self
+    return $self;
 }
 
 sub build_callback {
-    my $self = shift;
+    my $self       = shift;
     my $out_or_err = shift;
-    my $options = shift;
+    my $options    = shift;
 
-    if ( defined( $options->{$out_or_err . '_callback'} ) ) {
-        return $options->{$out_or_err . '_callback'};
+    if ( defined( $options->{ $out_or_err . '_callback' } ) ) {
+        return $options->{ $out_or_err . '_callback' };
     }
-    elsif ( $options->{$out_or_err . '_buffer'} ) {
-        $self->{$out_or_err . '_buffer'} = ();
+    elsif ( $options->{ $out_or_err . '_buffer' } ) {
+        $self->{ $out_or_err . '_buffer' } = ();
         return sub {
-            push( @{$self->{$out_or_err . '_buffer'}}, shift );
+            push( @{ $self->{ $out_or_err . '_buffer' } }, shift );
         };
     }
-    return undef;
+    return;
 }
 
 sub clear_buffers {
@@ -45,11 +46,11 @@ sub clear_buffers {
 }
 
 sub err_buffer {
-    return join( '', @{shift->{err_buffer}} );
+    return join( '', @{ shift->{err_buffer} } );
 }
 
 sub options {
-    my $self = shift;
+    my $self    = shift;
     my %options = @_;
 
     $options{out_callback} = $self->build_callback( 'out', \%options );
@@ -59,42 +60,42 @@ sub options {
 }
 
 sub out_buffer {
-    return join( '', @{shift->{out_buffer}} );
+    return join( '', @{ shift->{out_buffer} } );
 }
 
 sub run {
-    my $self = shift;
+    my $self    = shift;
     my @command = @_;
     my %options = ();
-    
+
     # if last arg is hashref, its command options not arg...
     if ( ref( $command[-1] ) eq 'HASH' ) {
-        %options = $self->options( %{pop(@command)} );
+        %options = $self->options( %{ pop(@command) } );
     }
-    
+
     $self->clear_buffers();
 
     return $self->{command_runner}->run_command( @command, \%options );
 }
 
 sub run_or_die {
-    my $self = shift;
+    my $self    = shift;
     my @command = @_;
     my %options = ();
-    
+
     # if last arg is hashref, its command options not arg...
     if ( ref( $command[-1] ) eq 'HASH' ) {
-        %options = $self->options( %{pop(@command)} );
+        %options = $self->options( %{ pop(@command) } );
     }
 
     $self->clear_buffers();
 
     my $exit_code = $self->{command_runner}->run_command( @command, \%options );
-    if ( $exit_code ) {
+    if ($exit_code) {
         my $message = "FAILED ($exit_code): @command";
         $message .= " out_buffer=($self->{out_buffer})" if ( $options{out_buffer} );
         $message .= " err_buffer=($self->{err_buffer})" if ( $options{err_buffer} );
-        die( $message );
+        die($message);
     }
 }
 
@@ -106,7 +107,7 @@ IPC::Open3::Callback::CommandRunner - A utility class that wraps IPC::Open3::Cal
 
 =head1 VERSION
 
-version 1.01
+version 1.02
 
 =head1 SYNOPSIS
 
@@ -181,7 +182,13 @@ will C<die> on a non-zero exit code instead of returning the exit code.
 
 =head1 AUTHOR
 
-Lucas Theisen (lucastheisen@pastdev.com)
+=over
+
+=item *
+
+Lucas Theisen E<lt>lucastheisen@pastdev.comE<gt>
+
+=back
 
 =head1 COPYRIGHT
 
