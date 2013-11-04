@@ -5,7 +5,7 @@ use warnings;
 
 package IPC::Open3::Callback::NullLogger;
 {
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.02';
+  $IPC::Open3::Callback::NullLogger::VERSION = '1.03';
 }
 
 use AutoLoader;
@@ -25,8 +25,10 @@ no AutoLoader;
 
 package IPC::Open3::Callback;
 {
-  $IPC::Open3::Callback::VERSION = '1.02';
+  $IPC::Open3::Callback::VERSION = '1.03';
 }
+
+# ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(safe_open3);
@@ -66,7 +68,6 @@ sub new {
     my $args_ref = shift;
 
     if ( defined($args_ref) ) {
-
         $logger->logdie('parameters must be an hash reference')
             unless ( ( ref($args_ref) ) eq 'HASH' );
         $self->{out_callback}   = $args_ref->{out_callback};
@@ -74,7 +75,6 @@ sub new {
         $self->{buffer_output}  = $args_ref->{buffer_output};
         $self->{select_timeout} = $args_ref->{select_timeout} || 3;
         $self->{buffer_size}    = $args_ref->{buffer_size} || 1024;
-
     }
     else {
         $self->{select_timeout} = 3;
@@ -87,7 +87,7 @@ sub new {
     return $self;
 }
 
-sub append_to_buffer {
+sub _append_to_buffer {
     my $self       = shift;
     my $buffer_ref = shift;
     my $data       = $$buffer_ref . shift;
@@ -102,7 +102,7 @@ sub append_to_buffer {
     return @lines;
 }
 
-sub nix_open3 {
+sub _nix_open3 {
     my @command = @_;
 
     my ( $in_fh, $out_fh, $err_fh ) = ( gensym(), gensym(), gensym() );
@@ -110,7 +110,6 @@ sub nix_open3 {
 }
 
 sub run_command {
-
     my $self    = shift;
     my @command = @_;
     my $options = {};
@@ -154,10 +153,10 @@ sub run_command {
             }
             else {
                 if ( $fh == $out_fh ) {
-                    $self->write_to_callback( $out_callback, $line, $out_buffer_ref, 0, $pid );
+                    $self->_write_to_callback( $out_callback, $line, $out_buffer_ref, 0, $pid );
                 }
                 elsif ( $fh == $err_fh ) {
-                    $self->write_to_callback( $err_callback, $line, $err_buffer_ref, 0, $pid );
+                    $self->_write_to_callback( $err_callback, $line, $err_buffer_ref, 0, $pid );
                 }
                 else {
                     $logger->logdie('Impossible... somehow got a filehandle I dont know about!');
@@ -167,17 +166,17 @@ sub run_command {
     }
 
     # flush buffers
-    $self->write_to_callback( $out_callback, '', $out_buffer_ref, 1, $pid );
-    $self->write_to_callback( $err_callback, '', $err_buffer_ref, 1, $pid );
-    return $self->destroy_child();
+    $self->_write_to_callback( $out_callback, '', $out_buffer_ref, 1, $pid );
+    $self->_write_to_callback( $err_callback, '', $err_buffer_ref, 1, $pid );
+    return $self->_destroy_child();
 }
 
 sub DESTROY {
     my $self = shift;
-    $self->destroy_child();
+    $self->_destroy_child();
 }
 
-sub destroy_child {
+sub _destroy_child {
     my $self = shift;
 
     waitpid( $self->{pid}, 0 ) if ( $self->{pid} );
@@ -189,7 +188,7 @@ sub destroy_child {
 }
 
 sub safe_open3 {
-    return ( $^O =~ /MSWin32/ ) ? win_open3(@_) : nix_open3(@_);
+    return ( $^O =~ /MSWin32/ ) ? _win_open3(@_) : _nix_open3(@_);
 }
 
 sub send_input {
@@ -197,12 +196,12 @@ sub send_input {
     $self->{input_buffer} = shift;
 }
 
-sub win_open3 {
+sub _win_open3 {
     my @command = @_;
 
-    my ( $in_read,  $in_write )  = win_pipe();
-    my ( $out_read, $out_write ) = win_pipe();
-    my ( $err_read, $err_write ) = win_pipe();
+    my ( $in_read,  $in_write )  = _win_pipe();
+    my ( $out_read, $out_write ) = _win_pipe();
+    my ( $err_read, $err_write ) = _win_pipe();
 
     my $pid = open3(
         '>&' . fileno($in_read),
@@ -213,7 +212,7 @@ sub win_open3 {
     return ( $pid, $in_write, $out_read, $err_read );
 }
 
-sub win_pipe {
+sub _win_pipe {
     my ( $read, $write ) = IO::Socket->socketpair( AF_UNIX, SOCK_STREAM, PF_UNSPEC );
     $read->shutdown(SHUT_WR);     # No more writing for reader
     $write->shutdown(SHUT_RD);    # No more reading for writer
@@ -221,7 +220,7 @@ sub win_pipe {
     return ( $read, $write );
 }
 
-sub write_to_callback {
+sub _write_to_callback {
     my $self       = shift;
     my $callback   = shift;
     my $data       = shift;
@@ -236,18 +235,22 @@ sub write_to_callback {
         return;
     }
 
-    &{$callback}($_) foreach ( $self->append_to_buffer( $buffer_ref, $data, $flush ) );
+    &{$callback}($_) foreach ( $self->_append_to_buffer( $buffer_ref, $data, $flush ) );
 }
 
 1;
+
 __END__
+
+=pod
+
 =head1 NAME
 
-IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
+IPC::Open3::Callback::NullLogger - An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 
 =head1 VERSION
 
-version 1.02
+version 1.03
 
 =head1 SYNOPSIS
 
@@ -335,7 +338,7 @@ ensure forked processes do not become zombies.
 This method works for both *nix and Windows sytems.  On a windows system,
 it will use sockets per L<http://www.perlmonks.org/index.pl?node_id=811150>.
 
-=head1 CONSTRUCTOR
+=head1 CONSTRUCTORS
 
 =head2 new( \%options )
 
@@ -397,50 +400,52 @@ constructor for this call.
 
 Returns the exit code from the command.
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-=over
-
-=item *
-
-Lucas Theisen E<lt>lucastheisen@pastdev.comE<gt>
+=over 4
 
 =item *
 
-Alceu Rodrigues de Freitas Junior E<lt>arfreitas@cpan.orgE<gt>
+Lucas Theisen <lucastheisen@pastdev.com>
+
+=item *
+
+Alceu Rodrigues de Freitas Junior <arfreitas@cpan.org>
 
 =back
 
-=head1 COPYRIGHT
+=head1 COPYRIGHT AND LICENSE
 
-Copyright 2013 pastdev.com. All rights reserved.
+This software is copyright (c) 2013 by Lucas Theisen.
 
-This library is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =head1 SEE ALSO
 
-=over
+Please see those modules/websites for more information related to this module.
+
+=over 4
 
 =item *
 
-L<IPC::Open3>
+L<IPC::Open3|IPC::Open3>
 
 =item *
 
-L<IPC::Open3::Callback::Command>
+L<IPC::Open3::Callback::Command|IPC::Open3::Callback::Command>
 
 =item *
 
-L<IPC::Open3::Callback::CommandRunner>
+L<IPC::Open3::Callback::CommandRunner|IPC::Open3::Callback::CommandRunner>
 
 =item *
 
-L<https://github.com/lucastheisen/ipc-open3-callback>
+L<https://github.com/lucastheisen/ipc-open3-callback|https://github.com/lucastheisen/ipc-open3-callback>
 
 =item *
 
-L<http://stackoverflow.com/q/16675950/516433>
+L<http://stackoverflow.com/q/16675950/516433|http://stackoverflow.com/q/16675950/516433>
 
 =back
 

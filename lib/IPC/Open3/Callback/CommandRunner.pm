@@ -5,8 +5,10 @@ use warnings;
 
 package IPC::Open3::Callback::CommandRunner;
 {
-  $IPC::Open3::Callback::CommandRunner::VERSION = '1.02';
+  $IPC::Open3::Callback::CommandRunner::VERSION = '1.03';
 }
+
+# ABSTRACT: A utility class that wraps IPC::Open3::Callback with available output buffers and an option to die on failure instead of returning exit code.
 
 use Hash::Util qw(lock_keys);
 use IPC::Open3::Callback;
@@ -14,7 +16,7 @@ use IPC::Open3::Callback;
 sub new {
     my $prototype = shift;
     my $class     = ref($prototype) || $prototype;
-    my $self      = { command_runner => IPC::Open3::Callback->new(), };
+    my $self      = { command_runner => IPC::Open3::Callback->new() };
     bless( $self, $class );
 
     lock_keys( %{$self}, keys( %{$self} ), 'out_buffer', 'err_buffer' );
@@ -22,7 +24,7 @@ sub new {
     return $self;
 }
 
-sub build_callback {
+sub _build_callback {
     my $self       = shift;
     my $out_or_err = shift;
     my $options    = shift;
@@ -39,27 +41,27 @@ sub build_callback {
     return;
 }
 
-sub clear_buffers {
+sub _clear_buffers {
     my $self = shift;
     delete( $self->{out_buffer} );
     delete( $self->{err_buffer} );
 }
 
-sub err_buffer {
+sub get_err_buffer {
     return join( '', @{ shift->{err_buffer} } );
 }
 
-sub options {
+sub _options {
     my $self    = shift;
     my %options = @_;
 
-    $options{out_callback} = $self->build_callback( 'out', \%options );
-    $options{err_callback} = $self->build_callback( 'err', \%options );
+    $options{out_callback} = $self->_build_callback( 'out', \%options );
+    $options{err_callback} = $self->_build_callback( 'err', \%options );
 
     return %options;
 }
 
-sub out_buffer {
+sub get_out_buffer {
     return join( '', @{ shift->{out_buffer} } );
 }
 
@@ -70,10 +72,10 @@ sub run {
 
     # if last arg is hashref, its command options not arg...
     if ( ref( $command[-1] ) eq 'HASH' ) {
-        %options = $self->options( %{ pop(@command) } );
+        %options = $self->_options( %{ pop(@command) } );
     }
 
-    $self->clear_buffers();
+    $self->_clear_buffers();
 
     return $self->{command_runner}->run_command( @command, \%options );
 }
@@ -85,10 +87,10 @@ sub run_or_die {
 
     # if last arg is hashref, its command options not arg...
     if ( ref( $command[-1] ) eq 'HASH' ) {
-        %options = $self->options( %{ pop(@command) } );
+        %options = $self->_options( %{ pop(@command) } );
     }
 
-    $self->clear_buffers();
+    $self->_clear_buffers();
 
     my $exit_code = $self->{command_runner}->run_command( @command, \%options );
     if ($exit_code) {
@@ -100,14 +102,18 @@ sub run_or_die {
 }
 
 1;
+
 __END__
+
+=pod
+
 =head1 NAME
 
 IPC::Open3::Callback::CommandRunner - A utility class that wraps IPC::Open3::Callback with available output buffers and an option to die on failure instead of returning exit code.
 
 =head1 VERSION
 
-version 1.02
+version 1.03
 
 =head1 SYNOPSIS
 
@@ -128,25 +134,27 @@ version 1.02
 Adds more convenience to IPC::Open3::Callback by buffering output and error
 if needed and dieing on failure if wanted.
 
-=head1 CONSTRUCTOR
+=head1 CONSTRUCTORS
 
 =head2 new()
 
 The constructor creates a new CommandRunner.
 
+=head1 ATTRIBUTES
+
+=head2 get_err_buffer()
+
+Returns the contents of the err_buffer from the last call to 
+L<run|/"run( $command, $arg1, ..., $argN, \%options )"> or 
+L<run_or_die|/"run_or_die( $command, $arg1, ..., $argN, \%options )">.
+
+=head2 get_out_buffer()
+
+Returns the contents of the err_buffer from the last call to 
+L<run|/"run( $command, $arg1, ..., $argN, \%options )"> or 
+L<run_or_die|/"run_or_die( $command, $arg1, ..., $argN, \%options )">.
+
 =head1 METHODS
-
-=head2 err_buffer()
-
-Returns the contents of the err_buffer from the last call to 
-L<run|/"run( $command, $arg1, ..., $argN, \%options )"> or 
-L<run_or_die|/"run_or_die( $command, $arg1, ..., $argN, \%options )">.
-
-=head2 out_buffer()
-
-Returns the contents of the err_buffer from the last call to 
-L<run|/"run( $command, $arg1, ..., $argN, \%options )"> or 
-L<run_or_die|/"run_or_die( $command, $arg1, ..., $argN, \%options )">.
 
 =head2 run( $command, $arg1, ..., $argN, \%options )
 
@@ -180,19 +188,45 @@ Returns the exit code from the command.
 The same as L<run|/"run( $command, $arg1, ..., $argN, \%options )"> exept that it
 will C<die> on a non-zero exit code instead of returning the exit code.
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-=over
+=over 4
 
 =item *
 
-Lucas Theisen E<lt>lucastheisen@pastdev.comE<gt>
+Lucas Theisen <lucastheisen@pastdev.com>
+
+=item *
+
+Alceu Rodrigues de Freitas Junior <arfreitas@cpan.org>
 
 =back
 
-=head1 COPYRIGHT
+=head1 COPYRIGHT AND LICENSE
 
-Copyright 2013 pastdev.com.  All rights reserved.
+This software is copyright (c) 2013 by Lucas Theisen.
 
-This library is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 SEE ALSO
+
+Please see those modules/websites for more information related to this module.
+
+=over 4
+
+=item *
+
+L<IPC::Open3::Callback|IPC::Open3::Callback>
+
+=item *
+
+L<IPC::Open3::Callback|IPC::Open3::Callback>
+
+=item *
+
+L<IPC::Open3::Callback::Command|IPC::Open3::Callback::Command>
+
+=back
+
+=cut

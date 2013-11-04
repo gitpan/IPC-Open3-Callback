@@ -1,12 +1,10 @@
 Changes
-Changes~
 LICENSE
 MANIFEST
 META.yml
 Makefile.PL
 README
 dist.ini
-dist.ini~
 lib/IPC/Open3/Callback.pm
 lib/IPC/Open3/Callback/Command.pm
 lib/IPC/Open3/Callback/CommandRunner.pm
@@ -16,3 +14,4 @@ t/Callback_CommandRunner.t
 t/author-critic.t
 t/release-pod-coverage.t
 t/release-pod-syntax.t
+weaver.ini

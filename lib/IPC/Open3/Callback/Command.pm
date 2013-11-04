@@ -5,8 +5,10 @@ use warnings;
 
 package IPC::Open3::Callback::Command;
 {
-  $IPC::Open3::Callback::Command::VERSION = '1.02';
+  $IPC::Open3::Callback::Command::VERSION = '1.03';
 }
+
+# ABSTRACT: A utility class that provides subroutines for building shell command strings.
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(command batch_command mkdir_command pipe_command rm_command sed_command);
@@ -162,14 +164,18 @@ sub wrap {
 }
 
 1;
+
 __END__
+
+=pod
+
 =head1 NAME
 
 IPC::Open3::Callback::Command - A utility class that provides subroutines for building shell command strings.
 
 =head1 VERSION
 
-version 1.02
+version 1.03
 
 =head1 SYNOPSIS
 
@@ -232,7 +238,7 @@ machines using existing tools (gnu/powershell/bash...) these utilities can be
 very helpful.  All functions in this module can take a C<\%destination_options>
 hash defining who/where/how to run the command.
 
-=head1 FUNCTIONS
+=head1 OPTIONS
 
 All commands can be supplied with C<\%destination_options>.  
 C<destination_options> control who/where/how to run the command.  The supported
@@ -267,6 +273,8 @@ username is specified, the command will not be wrapped in C<ssh>
 
 =back
 
+=head1 FUNCTIONS
+
 =head2 command( $command, \%destination_options )
 
 This wraps the supplied command with all the destination options.  If no 
@@ -287,12 +295,6 @@ C<\%destination_options> applied.
 Identical to 
 L<batch_command|"batch_command( $command1, $command2, ..., $commandN, \%destination_options )">
 except uses C<\|> to separate the commands instead of C<;>.
-
-=head2 rm_command( $path1, $path2, ..., $pathN, \%destination_options )
-
-Results in C<rm -rf $path1 $path2 ... $pathN> with the 
-C<\%destination_options> applied. This is a I<VERY> dangerous command and should
-be used with care.
 
 =head2 sed_command( $expression1, $expression2, ..., $expressionN, \%destination_options )
 
@@ -363,19 +365,45 @@ issued on the console, they might show up in the command history...
 
 =back
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-=over
+=over 4
 
 =item *
 
-Lucas Theisen E<lt>lucastheisen@pastdev.comE<gt>
+Lucas Theisen <lucastheisen@pastdev.com>
+
+=item *
+
+Alceu Rodrigues de Freitas Junior <arfreitas@cpan.org>
 
 =back
 
-=head1 COPYRIGHT
+=head1 COPYRIGHT AND LICENSE
 
-Copyright 2013 pastdev.com.  All rights reserved.
+This software is copyright (c) 2013 by Lucas Theisen.
 
-This library is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 SEE ALSO
+
+Please see those modules/websites for more information related to this module.
+
+=over 4
+
+=item *
+
+L<IPC::Open3::Callback|IPC::Open3::Callback>
+
+=item *
+
+L<IPC::Open3::Callback|IPC::Open3::Callback>
+
+=item *
+
+L<IPC::Open3::Callback::CommandRunner|IPC::Open3::Callback::CommandRunner>
+
+=back
+
+=cut
