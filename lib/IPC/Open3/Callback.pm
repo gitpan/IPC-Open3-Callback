@@ -5,7 +5,7 @@ use warnings;
 
 package IPC::Open3::Callback::NullLogger;
 {
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.03';
+  $IPC::Open3::Callback::NullLogger::VERSION = '1.04';
 }
 
 use AutoLoader;
@@ -25,7 +25,7 @@ no AutoLoader;
 
 package IPC::Open3::Callback;
 {
-  $IPC::Open3::Callback::VERSION = '1.03';
+  $IPC::Open3::Callback::VERSION = '1.04';
 }
 
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
@@ -250,7 +250,7 @@ IPC::Open3::Callback::NullLogger - An extension to IPC::Open3 that will feed out
 
 =head1 VERSION
 
-version 1.03
+version 1.04
 
 =head1 SYNOPSIS
 

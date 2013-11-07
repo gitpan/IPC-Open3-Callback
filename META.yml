@@ -15,4 +15,7 @@ meta-spec:
 name: IPC-Open3-Callback
 requires:
   IPC::Open3: 0
-version: 1.03
+resources:
+  homepage: https://github.com/lucastheisen/ipc-open3-callback
+  repository: https://github.com/lucastheisen/ipc-open3-callback.git
+version: 1.04
