@@ -5,7 +5,7 @@ use warnings;
 
 package IPC::Open3::Callback::NullLogger;
 {
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.04';
+  $IPC::Open3::Callback::NullLogger::VERSION = '1.05';
 }
 
 use AutoLoader;
@@ -25,7 +25,7 @@ no AutoLoader;
 
 package IPC::Open3::Callback;
 {
-  $IPC::Open3::Callback::VERSION = '1.04';
+  $IPC::Open3::Callback::VERSION = '1.05';
 }
 
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
@@ -39,6 +39,11 @@ use IO::Select;
 use IO::Socket;
 use IPC::Open3;
 use Symbol qw(gensym);
+
+use parent qw(Class::Accessor);
+__PACKAGE__->follow_best_practice;
+__PACKAGE__->mk_accessors(
+    qw(out_callback err_callback buffer_output select_timeout buffer_size pid input_buffer));
 
 my $logger;
 eval {
@@ -60,7 +65,7 @@ sub new {
         select_timeout => undef,
         buffer_size    => undef,
         pid            => undef,
-        last_cmd       => undef,
+        last_command   => undef,
         input_buffer   => undef
     };
     bless( $self, $class );
@@ -102,6 +107,35 @@ sub _append_to_buffer {
     return @lines;
 }
 
+sub clear_input_buffer {
+    my $self = shift;
+    delete( $self->{input_buffer} );
+}
+
+sub DESTROY {
+    my $self = shift;
+    $self->_destroy_child();
+}
+
+sub _destroy_child {
+    my $self = shift;
+
+    waitpid( $self->get_pid(), 0 ) if ( $self->get_pid() );
+    my $exit_code = $? >> 8;
+
+    $logger->debug( "exited '", $self->get_last_command(), "' with code ", $exit_code );
+    $self->set_pid(undef);
+    return $exit_code;
+}
+
+sub get_last_command {
+
+    my $self = shift;
+
+    return $self->{last_command};
+
+}
+
 sub _nix_open3 {
     my @command = @_;
 
@@ -120,32 +154,32 @@ sub run_command {
     }
 
     my ( $out_callback, $out_buffer_ref, $err_callback, $err_buffer_ref );
-    $out_callback = $options->{out_callback} || $self->{out_callback};
-    $err_callback = $options->{err_callback} || $self->{err_callback};
-    if ( $options->{buffer_output} || $self->{buffer_output} ) {
+    $out_callback = $options->{out_callback} || $self->get_out_callback();
+    $err_callback = $options->{err_callback} || $self->get_err_callback();
+    if ( $options->{buffer_output} || $self->get_buffer_output() ) {
         $out_buffer_ref = \'';
         $err_buffer_ref = \'';
     }
 
-    $self->{last_cmd} = join( ' ', @command );
-    $logger->debug( "Running '", $self->{last_cmd}, "'" );
+    $self->set_last_command( \@command );
+    $logger->debug( "Running '", $self->get_last_command(), "'" );
     my ( $pid, $in_fh, $out_fh, $err_fh ) = safe_open3(@command);
-    $self->{pid} = $pid;
+    $self->set_pid($pid);
 
     my $select = IO::Select->new();
     $select->add( $out_fh, $err_fh );
 
-    while ( my @ready = $select->can_read( $self->{select_timeout} ) ) {
-        if ( $self->{input_buffer} ) {
-            syswrite( $in_fh, $self->{input_buffer} );
-            delete( $self->{input_buffer} );
+    while ( my @ready = $select->can_read( $self->get_select_timeout() ) ) {
+        if ( $self->get_input_buffer() ) {
+            syswrite( $in_fh, $self->get_input_buffer() );
+            $self->clear_input_buffer();
         }
         foreach my $fh (@ready) {
             my $line;
-            my $bytes_read = sysread( $fh, $line, $self->{buffer_size} );
+            my $bytes_read = sysread( $fh, $line, $self->get_buffer_size() );
             if ( !defined($bytes_read) && !$!{ECONNRESET} ) {
                 $logger->error( "sysread failed: ", sub { Dumper(%!) } );
-                $logger->logdie( "error in running '", $self->{last_cmd}, "': ", $! );
+                $logger->logdie( "error in running '", $self->get_last_command(), "': ", $! );
             }
             elsif ( !defined($bytes_read) || $bytes_read == 0 ) {
                 $select->remove($fh);
@@ -153,10 +187,10 @@ sub run_command {
             }
             else {
                 if ( $fh == $out_fh ) {
-                    $self->_write_to_callback( $out_callback, $line, $out_buffer_ref, 0, $pid );
+                    $self->_write_to_callback( $out_callback, $line, $out_buffer_ref, 0 );
                 }
                 elsif ( $fh == $err_fh ) {
-                    $self->_write_to_callback( $err_callback, $line, $err_buffer_ref, 0, $pid );
+                    $self->_write_to_callback( $err_callback, $line, $err_buffer_ref, 0 );
                 }
                 else {
                     $logger->logdie('Impossible... somehow got a filehandle I dont know about!');
@@ -166,25 +200,9 @@ sub run_command {
     }
 
     # flush buffers
-    $self->_write_to_callback( $out_callback, '', $out_buffer_ref, 1, $pid );
-    $self->_write_to_callback( $err_callback, '', $err_buffer_ref, 1, $pid );
+    $self->_write_to_callback( $out_callback, '', $out_buffer_ref, 1 );
+    $self->_write_to_callback( $err_callback, '', $err_buffer_ref, 1 );
     return $self->_destroy_child();
-}
-
-sub DESTROY {
-    my $self = shift;
-    $self->_destroy_child();
-}
-
-sub _destroy_child {
-    my $self = shift;
-
-    waitpid( $self->{pid}, 0 ) if ( $self->{pid} );
-    my $exit_code = $? >> 8;
-
-    $logger->debug( "exited '", $self->{last_cmd}, "' with code ", $exit_code );
-    $self->{pid} = undef;
-    return $exit_code;
 }
 
 sub safe_open3 {
@@ -193,7 +211,17 @@ sub safe_open3 {
 
 sub send_input {
     my $self = shift;
-    $self->{input_buffer} = shift;
+    $self->set_input_buffer(shift);
+}
+
+sub set_last_command {
+    my $self        = shift;
+    my $command_ref = shift;    #array ref
+
+    $logger->logdie('the command parameter must be an array reference')
+        unless ( ( ref($command_ref) ) eq 'ARRAY' );
+
+    $self->{last_command} = join( ' ', @{$command_ref} );
 }
 
 sub _win_open3 {
@@ -221,17 +249,17 @@ sub _win_pipe {
 }
 
 sub _write_to_callback {
+
     my $self       = shift;
     my $callback   = shift;
     my $data       = shift;
     my $buffer_ref = shift;
     my $flush      = shift;
-    my $pid        = shift;
 
     return if ( !defined($callback) );
 
     if ( !defined($buffer_ref) ) {
-        &{$callback}( $data, $pid );
+        &{$callback}( $data, $self->get_pid() );
         return;
     }
 
@@ -250,7 +278,7 @@ IPC::Open3::Callback::NullLogger - An extension to IPC::Open3 that will feed out
 
 =head1 VERSION
 
-version 1.04
+version 1.05
 
 =head1 SYNOPSIS
 
@@ -384,6 +412,30 @@ timeout which will cause the loop to block until output is ready on either
 C<STDOUT> or C<STDERR>.
 
 =back
+
+=head1 ATTRIBUTES
+
+=head2 get_err_callback()
+
+=head2 set_err_callback( &subroutine )
+
+A subroutine to be called whenever a chunk of error is sent to STDERR by the
+opened process.
+
+=head2 get_last_command()
+
+=head2 set_last_command( @command )
+
+The last command run by the L<run_command|/"run_command( $command, $arg1, ..., $argN, \%options )"> method.
+The setter will turn the array into a string with join( ' ', @command ) and the getter
+will return that string.
+
+=head2 get_out_callback()
+
+=head2 set_out_callback( &subroutine )
+
+A subroutine to be called whenever a chunk of output is sent to STDOUT by the
+opened process.
 
 =head1 METHODS
 

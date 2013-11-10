@@ -5,7 +5,7 @@ use warnings;
 
 package IPC::Open3::Callback::CommandRunner;
 {
-  $IPC::Open3::Callback::CommandRunner::VERSION = '1.04';
+  $IPC::Open3::Callback::CommandRunner::VERSION = '1.05';
 }
 
 # ABSTRACT: A utility class that wraps IPC::Open3::Callback with available output buffers and an option to die on failure instead of returning exit code.
@@ -113,7 +113,7 @@ IPC::Open3::Callback::CommandRunner - A utility class that wraps IPC::Open3::Cal
 
 =head1 VERSION
 
-version 1.04
+version 1.05
 
 =head1 SYNOPSIS
 
