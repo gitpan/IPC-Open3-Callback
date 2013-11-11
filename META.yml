@@ -18,4 +18,4 @@ requires:
 resources:
   homepage: https://github.com/lucastheisen/ipc-open3-callback
   repository: https://github.com/lucastheisen/ipc-open3-callback.git
-version: 1.05
+version: 1.06
