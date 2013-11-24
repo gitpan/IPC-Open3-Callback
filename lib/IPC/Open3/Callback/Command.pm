@@ -5,7 +5,7 @@ use warnings;
 
 package IPC::Open3::Callback::Command;
 {
-  $IPC::Open3::Callback::Command::VERSION = '1.06';
+  $IPC::Open3::Callback::Command::VERSION = '1.07';
 }
 
 # ABSTRACT: A utility class that provides subroutines for building shell command strings.
@@ -175,7 +175,7 @@ IPC::Open3::Callback::Command - A utility class that provides subroutines for bu
 
 =head1 VERSION
 
-version 1.06
+version 1.07
 
 =head1 SYNOPSIS
 
