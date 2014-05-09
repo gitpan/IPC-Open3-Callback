@@ -3,7 +3,7 @@ NAME
     err to callbacks instead of requiring the caller to handle them.
 
 VERSION
-    version 1.07
+    version 1.08
 
 SYNOPSIS
       use IPC::Open3::Callback;

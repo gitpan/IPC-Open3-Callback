@@ -5,23 +5,27 @@ use warnings;
 
 package IPC::Open3::Callback::Command;
 {
-  $IPC::Open3::Callback::Command::VERSION = '1.07';
+  $IPC::Open3::Callback::Command::VERSION = '1.08';
 }
 
 # ABSTRACT: A utility class that provides subroutines for building shell command strings.
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(command batch_command mkdir_command pipe_command rm_command sed_command);
+our @EXPORT_OK =
+    qw(batch_command command command_options mkdir_command pipe_command rm_command sed_command write_command);
 
 sub batch_command {
     wrap(
         {},
         @_,
         sub {
-            my $options = shift;
             return @_;
         }
     );
+}
+
+sub command_options {
+    return IPC::Open3::Callback::Command::CommandOptions->new(@_);
 }
 
 sub command {
@@ -29,7 +33,6 @@ sub command {
         {},
         @_,
         sub {
-            my $options = shift;
             return shift;
         }
     );
@@ -40,7 +43,6 @@ sub mkdir_command {
         {},
         @_,
         sub {
-            my $options = shift;
             return 'mkdir -p "' . join( '" "', @_ ) . '"';
         }
     );
@@ -51,10 +53,17 @@ sub pipe_command {
         { command_separator => '|' },
         @_,
         sub {
-            my $options = shift;
             return @_;
         }
     );
+}
+
+sub _quote_command {
+    my ($command) = @_;
+    $command =~ s/\\/\\\\/g;
+    $command =~ s/`/\\`/g;    # for `command`
+    $command =~ s/"/\\"/g;
+    return "\"$command\"";
 }
 
 sub rm_command {
@@ -62,7 +71,6 @@ sub rm_command {
         {},
         @_,
         sub {
-            my $options = shift;
             return 'rm -rf "' . join( '" "', @_ ) . '"';
         }
     );
@@ -73,14 +81,19 @@ sub sed_command {
         {},
         @_,
         sub {
-            my $options = shift;
+            my @args    = @_;
+            my $options = {};
+
+            if ( ref( $args[$#args] ) eq 'HASH' ) {
+                $options = pop(@args);
+            }
 
             my $command = 'sed';
             $command .= ' -i' if ( $options->{in_place} );
             if ( defined( $options->{temp_script_file} ) ) {
                 my $temp_script_file_name = $options->{temp_script_file}->filename();
-                print( { $options->{temp_script_file} } join( ' ', '', map {"$_;"} @_ ) )
-                    if ( scalar(@_) );
+                print( { $options->{temp_script_file} } join( ' ', '', map {"$_;"} @args ) )
+                    if ( scalar(@args) );
                 print(
                     { $options->{temp_script_file} } join( ' ',
                         '',
@@ -91,7 +104,7 @@ sub sed_command {
                 $command .= " -f $temp_script_file_name";
             }
             else {
-                $command .= join( ' ', '', map {"-e '$_'"} @_ ) if ( scalar(@_) );
+                $command .= join( ' ', '', map {"-e '$_'"} @args ) if ( scalar(@args) );
                 $command .= join( ' ',
                     '',
                     map {"-e 's/$_/$options->{replace_map}{$_}/g'"}
@@ -105,45 +118,76 @@ sub sed_command {
     );
 }
 
+sub write_command {
+
+    # ($filename, @lines, [\%write_options], [$command_options])
+    my $filename = shift;
+    my @lines    = @_;
+    my ( $command_options, $write_options );
+    $command_options = pop(@lines)
+        if ( ref( $lines[$#lines] ) eq 'IPC::Open3::Callback::Command::CommandOptions' );
+    $write_options = pop(@lines) if ( ref( $lines[$#lines] ) eq 'HASH' );
+
+    my $remote_command = "dd of=$filename";
+    if ( defined($write_options) && defined( $write_options->{mode} ) ) {
+        if ( defined($command_options) ) {
+            $remote_command =
+                batch_command( $remote_command, "chmod $write_options->{mode} $filename",
+                $command_options );
+        }
+        elsif ( defined($command_options) ) {
+            $remote_command =
+                batch_command( $remote_command, "chmod $write_options->{mode} $filename" );
+        }
+    }
+    elsif ( defined($command_options) ) {
+        $remote_command = command( $remote_command, $command_options );
+    }
+
+    my $line_separator =
+        ( defined($write_options) && defined( $write_options->{line_separator} ) )
+        ? $write_options->{line_separator}
+        : '\n';
+    return pipe_command( 'printf "' . join( $line_separator, @lines ) . '"', $remote_command );
+}
+
 # Handles wrapping commands with possible ssh and command prefix
 sub wrap {
     my $wrap_options = shift;
     my $builder      = pop;
-    my $options      = pop;
     my @args         = @_;
-    my ( $ssh, $username, $hostname );
-    my $command_prefix = '';
+    my ( $ssh, $username, $hostname, $sudo_username, $pretty );
 
-    if ( ref($options) eq 'HASH' ) {
-        $ssh      = $options->{ssh} || 'ssh';
-        $username = $options->{username};
-        $hostname = $options->{hostname};
-        if ( defined( $options->{command_prefix} ) ) {
-            $command_prefix = $options->{command_prefix};
-        }
-    }
-    else {
-        push( @args, $options );
-        $options = {};
+    if ( ref( $args[$#args] ) eq 'IPC::Open3::Callback::Command::CommandOptions' ) {
+        my $options = pop(@args);
+        $ssh           = $options->get_ssh() || 'ssh';
+        $username      = $options->get_username();
+        $hostname      = $options->get_hostname();
+        $sudo_username = $options->get_sudo_username();
+        $pretty        = $options->get_pretty();
     }
 
     my $destination_command = '';
     my $command_separator   = $wrap_options->{command_separator} || ';';
-    my $first               = 1;
-    foreach my $command ( &$builder( $options, @args ) ) {
+    my $commands            = 0;
+    foreach my $command ( &$builder(@args) ) {
         if ( defined($command) ) {
-            if ($first) {
-                $first = 0;
-            }
-            else {
+            if ( $commands++ > 0 ) {
                 $destination_command .= $command_separator;
-                if ( $options->{pretty} ) {
+                if ($pretty) {
                     $destination_command .= "\n";
                 }
             }
-            $command =~ s/^(.*?);$/$1/;
-            $destination_command .= "$command_prefix$command";
+            $command =~ s/^(.*?[^\\]);$/$1/;    # from find -exec
+            $destination_command .= $command;
         }
+    }
+
+    if ( defined($sudo_username) ) {
+        $destination_command = "sudo "
+            . ( $sudo_username ? "-u $sudo_username " : '' )
+            . "bash -c "
+            . _quote_command($destination_command);
     }
 
     if ( !defined($username) && !defined($hostname) ) {
@@ -153,14 +197,88 @@ sub wrap {
     }
 
     my $userAt =
-        defined( $options->{username} )
-        ? (
-        ( $ssh =~ /plink(?:\.exe)?$/ ) ? "-l $options->{username} " : "$options->{username}\@" )
+        $username
+        ? ( ( $ssh =~ /plink(?:\.exe)?$/ ) ? "-l $username " : "$username\@" )
         : '';
 
-    $destination_command =~ s/\\/\\\\/g;
-    $destination_command =~ s/"/\\"/g;
-    return "$ssh $userAt" . ( $hostname || 'localhost' ) . " \"$destination_command\"";
+    $destination_command = _quote_command($destination_command);
+    return "$ssh $userAt" . ( $hostname || 'localhost' ) . " $destination_command";
+}
+
+package IPC::Open3::Callback::Command::CommandOptions;
+{
+  $IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.08';
+}
+
+use parent qw(Class::Accessor);
+__PACKAGE__->follow_best_practice;
+__PACKAGE__->mk_accessors(qw(always_ssh hostname pretty ssh sudo_username username));
+
+use Socket qw(getaddrinfo getnameinfo);
+
+sub new {
+    my ( $class, @args ) = @_;
+    return bless( {}, $class )->_init(@args);
+}
+
+sub _init {
+    my ( $self, %options ) = @_;
+
+    $self->{always_ssh}    = $options{always_ssh};
+    $self->{hostname}      = $options{hostname} if ( defined( $options{hostname} ) );
+    $self->{ssh}           = $options{ssh} if ( defined( $options{ssh} ) );
+    $self->{username}      = $options{username} if ( defined( $options{username} ) );
+    $self->{sudo_username} = $options{sudo_username} if ( defined( $options{sudo_username} ) );
+    $self->{pretty}        = $options{pretty} if ( defined( $options{pretty} ) );
+
+    return $self;
+}
+
+sub set_hostname {
+    my ( $self, $hostname ) = @_;
+    $self->{hostname} = $hostname;
+    delete( $self->{cached_hostname} );
+    delete( $self->{cached_local} );
+}
+
+sub get_hostname {
+    my ($self) = @_;
+
+    if ( !defined( $self->{cached_hostname} ) ) {
+        if ( $self->{always_ssh} || !$self->is_local() ) {
+            $self->{cached_hostname} = $self->{hostname};
+        }
+        else {
+            $self->{cached_hostname} = undef;
+        }
+    }
+
+    return $self->{cached_hostname};
+}
+
+sub is_local {
+    my ($self) = @_;
+
+    if ( !defined( $self->{cached_local} ) ) {
+        if ( !$self->{hostname} ) {
+            $self->{cached_local} = 1;
+        }
+        else {
+            my ( $local_hostname, $resolved_hostname, $addrinfo, $err );
+
+            ($local_hostname) = `hostname --fqdn` =~ /^(\S+)/;
+            ( $err, $addrinfo ) = getaddrinfo( $self->{hostname} );
+            if ( !$err ) {
+                ( $err, $resolved_hostname ) = getnameinfo( $addrinfo->{addr} ) if ( !$err );
+            }
+
+            if ( !$err ) {
+                $self->{cached_local} = $err ? 0 : lc($local_hostname) eq lc($resolved_hostname);
+            }
+        }
+    }
+
+    return $self->{cached_local};
 }
 
 1;
@@ -175,7 +293,7 @@ IPC::Open3::Callback::Command - A utility class that provides subroutines for bu
 
 =head1 VERSION
 
-version 1.07
+version 1.08
 
 =head1 SYNOPSIS
 
@@ -183,47 +301,48 @@ version 1.07
   my $command = command( 'echo' ); # echo
 
   # ssh foo "echo"
-  $command = command( 'echo', {hostname=>'foo'} ); 
+  $command = command( 'echo', command_options( hostname=>'foo' ) ); 
 
   # ssh bar@foo "echo"
-  $command = command( 'echo', {username=>'bar',hostname=>'foo'} ); 
+  $command = command( 'echo', command_options( username=>'bar',hostname=>'foo' ) ); 
   
   # plink -l bar foo "echo"
-  $command = command( 'echo', {username=>'bar',hostname=>'foo',ssh=>'plink'} ); 
+  $command = command( 'echo', command_options( username=>'bar',hostname=>'foo',ssh=>'plink' ) ); 
   
   # cd foo;cd bar
   $command = batch_command( 'cd foo', 'cd bar' ); 
   
   # ssh baz "cd foo;cd bar"
-  $command = batch_command( 'cd foo', 'cd bar', {hostname=>'baz'} ); 
+  $command = batch_command( 'cd foo', 'cd bar', command_options( hostname=>'baz' ) ); 
   
-  # ssh baz "sudo cd foo;sudo cd bar"
-  $command = batch_command( 'cd foo', 'cd bar', {hostname=>'baz',command_prefix=>'sudo '} ); 
+  # ssh baz "sudo bash -c \"cd foo;cd bar\""
+  $command = batch_command( 'cd foo', 'cd bar', command_options( hostname=>'baz',sudo_username=>'' ) ); 
   
   # ssh baz "mkdir -p \"foo\" \"bar\""
-  $command = mkdir_command( 'foo', 'bar', {hostname=>'baz'} ); 
+  $command = mkdir_command( 'foo', 'bar', command_options( hostname=>'baz' ) ); 
 
   # cat abc|ssh baz "dd of=def"
   $command = pipe_command( 
           'cat abc', 
-          command( 'dd of=def', {hostname=>'baz'} ) 
+          command( 'dd of=def', command_options( hostname=>'baz' ) ) 
       ); 
 
-  # ssh fred@baz "sudo -u joe rm -rf \"foo\" \"bar\""
-  $command = rm_command( 'foo', 'bar', {username=>'fred',hostname=>'baz',command_prefix=>'sudo -u joe '} ); 
+  # ssh fred@baz "sudo -u joe \"rm -rf \\\\"foo\\\\" \\\\"bar\\\\"\""
+  $command = rm_command( 'foo', 'bar', command_options( username=>'fred',hostname=>'baz',sudo_username=>'joe' ) ); 
   
   # sed -e 's/foo/bar/'
   $command = sed_command( 's/foo/bar/' ); 
   
   
-  # curl http://www.google.com|sed -e 's/google/gaggle/g'|ssh fred@baz "sudo -u joe dd of=\"/tmp/gaggle.com\"";ssh fred@baz "sudo -u joe rm -rf \"/tmp/google.com\"";
+  # curl http://www.google.com|sed -e \'s/google/gaggle/g\'|ssh fred@baz "sudo -u joe bash -c \"dd of=\\\\\\"/tmp/gaggle.com\\\\\\"\"";ssh fred@baz "sudo -u joe bash -c \"rm -rf \\\\\\"/tmp/google.com\\\\\\"\"";
+  my $command_options = command_options( username=>'fred',hostname=>'baz',sudo_username=>'joe' );
   $command = batch_command(
           pipe_command( 
               'curl http://www.google.com',
               sed_command( {replace_map=>{google=>'gaggle'}} ),
-              command( 'dd of="/tmp/gaggle.com"', {username=>'fred',hostname=>'baz',command_prefix=>'sudo -u joe '} )
+              command( 'dd of="/tmp/gaggle.com"', $command_options )
           ),
-          rm_command( '/tmp/google.com', {username=>'fred',hostname=>'baz',command_prefix=>'sudo -u joe '}) 
+          rm_command( '/tmp/google.com', $command_options )
       );
 
 =head1 DESCRIPTION
@@ -235,16 +354,36 @@ point to I<shelling> out for commands locally as there is almost certainly a
 perl function/library capable of doing whatever you need in perl code. However,
 If you are designing a footprintless agent that will run commands on remote
 machines using existing tools (gnu/powershell/bash...) these utilities can be
-very helpful.  All functions in this module can take a C<\%destination_options>
+very helpful.  All functions in this module can take a C<command_options>
 hash defining who/where/how to run the command.
 
 =head1 OPTIONS
 
-All commands can be supplied with C<\%destination_options>.  
-C<destination_options> control who/where/how to run the command.  The supported
+=head1 FUNCTIONS
+
+=head2 batch_command( $command1, $command2, ..., $commandN, [$command_options] )
+
+This will join all the commands with a C<;> and apply the supplied 
+C<command_options> to the result.
+
+=head2 command( $command, [$command_options] )
+
+This wraps the supplied command with all the destination options.  If no 
+options are supplied, $command is returned.
+
+=head2 command_options( %options ) 
+
+Returns a C<command_options> object to be supplied to other commands.
+All commands can be supplied with C<command_options>.  
+C<command_options> control who/where/how to run the command.  The supported
 options are:
 
 =over 4
+
+=item always_ssh
+
+If true, the command will always be wrapped by an ssh command even if the 
+hostname equates to localhost.
 
 =item ssh
 
@@ -273,30 +412,24 @@ username is specified, the command will not be wrapped in C<ssh>
 
 =back
 
-=head1 FUNCTIONS
-
-=head2 command( $command, \%destination_options )
-
-This wraps the supplied command with all the destination options.  If no 
-options are supplied, $command is returned.
-
-=head2 batch_command( $command1, $command2, ..., $commandN, \%destination_options )
-
-This will join all the commands with a C<;> and apply the supplied 
-C<\%destination_options> to the result.
-
-=head2 mkdir_command( $path1, $path2, ..., $pathN, \%destination_options )
+=head2 mkdir_command( $path1, $path2, ..., $pathN, [$command_options] )
 
 Results in C<mkdir -p $path1 $path2 ... $pathN> with the 
-C<\%destination_options> applied.
+C<command_options> applied.
 
-=head2 pipe_command( $command1, $command2, ..., $commandN, \%destination_options )
+=head2 pipe_command( $command1, $command2, ..., $commandN, [$command_options] )
 
 Identical to 
-L<batch_command|"batch_command( $command1, $command2, ..., $commandN, \%destination_options )">
+L<batch_command|"batch_command( $command1, $command2, ..., $commandN, [$command_options] )">
 except uses C<\|> to separate the commands instead of C<;>.
 
-=head2 sed_command( $expression1, $expression2, ..., $expressionN, \%destination_options )
+=head2 rm_command( $path1, $path2, ..., $pathN, [$command_options] )
+
+Results in C<rm -rf $path1 $path2 ... $pathN> with the 
+C<command_options> applied. This is a I<VERY> dangerous command and should
+be used with care.
+
+=head2 sed_command( $expression1, $expression2, ..., $expressionN, [$command_options] )
 
 Constructs a sed command
 
@@ -364,6 +497,10 @@ console that have protected information like passwords. If passwords are
 issued on the console, they might show up in the command history...
 
 =back
+
+=head2 write_command( $out_file, @lines, [$command_options] )
+
+Writes the C<@lines> to C<$out_file> with the C<$command_options> applied.
 
 =head1 AUTHORS
 

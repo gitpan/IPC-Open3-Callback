@@ -5,7 +5,7 @@ use warnings;
 
 package IPC::Open3::Callback::NullLogger;
 {
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.07';
+  $IPC::Open3::Callback::NullLogger::VERSION = '1.08';
 }
 
 use AutoLoader;
@@ -25,7 +25,7 @@ no AutoLoader;
 
 package IPC::Open3::Callback;
 {
-  $IPC::Open3::Callback::VERSION = '1.07';
+  $IPC::Open3::Callback::VERSION = '1.08';
 }
 
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
@@ -125,7 +125,7 @@ sub _destroy_child {
     waitpid( $self->get_pid(), 0 ) if ( $self->get_pid() );
     my $exit_code = $? >> 8;
 
-    $logger->debug( "exited '", $self->get_last_command(), "' with code ", $exit_code );
+    $logger->debug( "exited '", $self->get_last_command() || '', "' with code ", $exit_code );
     $self->_set_pid();
     return $exit_code;
 }
@@ -291,7 +291,7 @@ IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to 
 
 =head1 VERSION
 
-version 1.07
+version 1.08
 
 =head1 SYNOPSIS
 
