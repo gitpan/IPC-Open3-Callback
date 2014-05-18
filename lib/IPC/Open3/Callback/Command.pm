@@ -4,15 +4,14 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::Command;
-{
-  $IPC::Open3::Callback::Command::VERSION = '1.08';
-}
-
+$IPC::Open3::Callback::Command::VERSION = '1.09';
 # ABSTRACT: A utility class that provides subroutines for building shell command strings.
 
 use Exporter qw(import);
 our @EXPORT_OK =
-    qw(batch_command command command_options mkdir_command pipe_command rm_command sed_command write_command);
+    qw(batch_command command command_options cp_command mkdir_command pipe_command rm_command sed_command write_command);
+
+use File::Spec;
 
 sub batch_command {
     wrap(
@@ -36,6 +35,66 @@ sub command {
             return shift;
         }
     );
+}
+
+sub cp_command {
+    my ( $source_path, $source_command_options, $destination_path, $destination_command_options,
+        %cp_options );
+    $source_path            = shift;
+    $source_command_options = shift
+        if ( ref( $_[0] ) eq 'IPC::Open3::Callback::Command::CommandOptions' );
+    $destination_path            = shift;
+    $destination_command_options = shift
+        if ( ref( $_[0] ) eq 'IPC::Open3::Callback::Command::CommandOptions' );
+    %cp_options = @_;
+
+    my $source_command;
+    my $destination_command;
+    if ( $cp_options{file} ) {
+
+        # is a file, so use cat | dd
+        if ( $cp_options{compress} ) {
+            $source_command = "gzip -c $source_path";
+            $destination_command = pipe_command( "gunzip", "dd of=$destination_path" );
+        }
+        else {
+            $source_command      = "cat $source_path";
+            $destination_command = "dd of=$destination_path";
+        }
+    }
+    else {
+        # is a directory, so use tar or unzip
+        if ( $cp_options{archive} && $cp_options{archive} eq 'zip' ) {
+            my $temp_zip = File::Spec->catfile( $destination_path,
+                $cp_options{unzip_temp_file} || "temp_cp_command.zip" );
+            $source_command      = "bash -c \"cd $source_path;zip -qr - .\"";
+            $destination_command = batch_command(
+                "dd of=$temp_zip",
+                "unzip -qod $destination_path $temp_zip",
+                rm_command($temp_zip)
+            );
+        }
+        else {
+            # default, use tar
+            if ( $cp_options{compress} ) {
+                $source_command      = "tar cz -C $source_path .";
+                $destination_command = "tar xz -C $destination_path";
+            }
+            else {
+                $source_command      = "tar c -C $source_path .";
+                $destination_command = "tar x -C $destination_path";
+            }
+        }
+    }
+
+    if ($source_command_options) {
+        $source_command = command( $source_command, $source_command_options );
+    }
+    if ($destination_command_options) {
+        $destination_command = command( $destination_command, $destination_command_options );
+    }
+
+    return pipe_command( $source_command, $destination_command );
 }
 
 sub mkdir_command {
@@ -206,15 +265,10 @@ sub wrap {
 }
 
 package IPC::Open3::Callback::Command::CommandOptions;
-{
-  $IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.08';
-}
-
+$IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.09';
 use parent qw(Class::Accessor);
 __PACKAGE__->follow_best_practice;
-__PACKAGE__->mk_accessors(qw(always_ssh hostname pretty ssh sudo_username username));
-
-use Socket qw(getaddrinfo getnameinfo);
+__PACKAGE__->mk_accessors(qw(hostname pretty ssh sudo_username username));
 
 sub new {
     my ( $class, @args ) = @_;
@@ -224,61 +278,13 @@ sub new {
 sub _init {
     my ( $self, %options ) = @_;
 
-    $self->{always_ssh}    = $options{always_ssh};
-    $self->{hostname}      = $options{hostname} if ( defined( $options{hostname} ) );
-    $self->{ssh}           = $options{ssh} if ( defined( $options{ssh} ) );
-    $self->{username}      = $options{username} if ( defined( $options{username} ) );
+    $self->{hostname}      = $options{hostname}      if ( defined( $options{hostname} ) );
+    $self->{ssh}           = $options{ssh}           if ( defined( $options{ssh} ) );
+    $self->{username}      = $options{username}      if ( defined( $options{username} ) );
     $self->{sudo_username} = $options{sudo_username} if ( defined( $options{sudo_username} ) );
-    $self->{pretty}        = $options{pretty} if ( defined( $options{pretty} ) );
+    $self->{pretty}        = $options{pretty}        if ( defined( $options{pretty} ) );
 
     return $self;
-}
-
-sub set_hostname {
-    my ( $self, $hostname ) = @_;
-    $self->{hostname} = $hostname;
-    delete( $self->{cached_hostname} );
-    delete( $self->{cached_local} );
-}
-
-sub get_hostname {
-    my ($self) = @_;
-
-    if ( !defined( $self->{cached_hostname} ) ) {
-        if ( $self->{always_ssh} || !$self->is_local() ) {
-            $self->{cached_hostname} = $self->{hostname};
-        }
-        else {
-            $self->{cached_hostname} = undef;
-        }
-    }
-
-    return $self->{cached_hostname};
-}
-
-sub is_local {
-    my ($self) = @_;
-
-    if ( !defined( $self->{cached_local} ) ) {
-        if ( !$self->{hostname} ) {
-            $self->{cached_local} = 1;
-        }
-        else {
-            my ( $local_hostname, $resolved_hostname, $addrinfo, $err );
-
-            ($local_hostname) = `hostname --fqdn` =~ /^(\S+)/;
-            ( $err, $addrinfo ) = getaddrinfo( $self->{hostname} );
-            if ( !$err ) {
-                ( $err, $resolved_hostname ) = getnameinfo( $addrinfo->{addr} ) if ( !$err );
-            }
-
-            if ( !$err ) {
-                $self->{cached_local} = $err ? 0 : lc($local_hostname) eq lc($resolved_hostname);
-            }
-        }
-    }
-
-    return $self->{cached_local};
 }
 
 1;
@@ -293,7 +299,7 @@ IPC::Open3::Callback::Command - A utility class that provides subroutines for bu
 
 =head1 VERSION
 
-version 1.08
+version 1.09
 
 =head1 SYNOPSIS
 
@@ -380,24 +386,17 @@ options are:
 
 =over 4
 
-=item always_ssh
-
-If true, the command will always be wrapped by an ssh command even if the 
-hostname equates to localhost.
-
 =item ssh
 
 The ssh command to use, defaults to C<ssh>.  You can use this to specify other
 commands like C<plink> for windows or an implementation of C<ssh> that is not
 in your path.
 
-=item command_prefix
+=item sudo_username
 
-As it sounds, this is a prefix to your command.  Mainly useful for using 
-C<sudo>. This prefix is added like this C<$command_prefix$command> so be sure
-to put a space at the end of your prefix unless you want to modify the name
-of the command itself.  For example, 
-C<$command_prefix = 'sudo -u priveleged_user ';>.
+Prefixes your command thusly: C<sudo -u $sudo_username $command>.  If combined
+with a remote hostname, the C<sudo> will be executed on the remote system.  For
+example: C<ssh $hostname "sudo -u $sudo_user \"$command\"">.
 
 =item username
 
@@ -409,6 +408,34 @@ C<plink -l $username $hostname>.
 
 The hostname/IP of the server to run this command on. If localhost, and no 
 username is specified, the command will not be wrapped in C<ssh>
+
+=back
+
+=head2 cp_command( $source_path, [$source_command_options], $destination_path, [$destination_command_options], %cp_options )
+
+This generates a command for copying files or directories from a source to
+a destination.  Both source and destination have optional C<command_options>, 
+and the C<cp_command> itself has the following options:
+
+=over 4
+
+=item archive
+
+If specified and set to 'zip', then zip will be used to archive the source
+before sending it to the destination.  Otherwise, tar will be used.  Note,
+that if C<file =E<gt> 1> then this is ignored.
+
+=item compress
+
+If supplied and true, then the source data will be compressed before sending
+to the destination where it will be uncompressed before writing out.  Note,
+that if you use C<archive =E<gt> 'zip'> then this is ignored as zip implies 
+compression.
+
+=item file
+
+If supplied and true, then this is a file copy, otherwise it is a directory 
+copy.
 
 =back
 
@@ -542,5 +569,7 @@ L<IPC::Open3::Callback|IPC::Open3::Callback>
 L<IPC::Open3::Callback::CommandRunner|IPC::Open3::Callback::CommandRunner>
 
 =back
+
+=for Pod::Coverage wrap
 
 =cut

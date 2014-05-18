@@ -4,10 +4,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::NullLogger;
-{
-  $IPC::Open3::Callback::NullLogger::VERSION = '1.08';
-}
-
+$IPC::Open3::Callback::NullLogger::VERSION = '1.09';
 use AutoLoader;
 
 our $LOG_TO_STDOUT = 0;
@@ -24,10 +21,7 @@ sub new {
 no AutoLoader;
 
 package IPC::Open3::Callback;
-{
-  $IPC::Open3::Callback::VERSION = '1.08';
-}
-
+$IPC::Open3::Callback::VERSION = '1.09';
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 # PODNAME: IPC::Open3::Callback
 
@@ -291,7 +285,7 @@ IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to 
 
 =head1 VERSION
 
-version 1.08
+version 1.09
 
 =head1 SYNOPSIS
 
@@ -540,5 +534,7 @@ L<https://github.com/lucastheisen/ipc-open3-callback|https://github.com/lucasthe
 L<http://stackoverflow.com/q/16675950/516433|http://stackoverflow.com/q/16675950/516433>
 
 =back
+
+=for Pod::Coverage send_input
 
 =cut
