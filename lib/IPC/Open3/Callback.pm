@@ -1,34 +1,16 @@
-#!/usr/bin/perl
-
 use strict;
 use warnings;
 
-package IPC::Open3::Callback::NullLogger;
-$IPC::Open3::Callback::NullLogger::VERSION = '1.09';
-use AutoLoader;
-
-our $LOG_TO_STDOUT = 0;
-
-sub AUTOLOAD {
-    shift;
-    print("IPC::Open3::Callback::NullLogger: @_\n") if $LOG_TO_STDOUT;
-}
-
-sub new {
-    return bless( {}, shift );
-}
-
-no AutoLoader;
-
 package IPC::Open3::Callback;
-$IPC::Open3::Callback::VERSION = '1.09';
+{
+  $IPC::Open3::Callback::VERSION = '1.10';
+}
+
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 # PODNAME: IPC::Open3::Callback
 
-use Exporter qw(import);
-our @EXPORT_OK = qw(safe_open3);
-
 use Data::Dumper;
+use Exporter qw(import);
 use Hash::Util qw(lock_keys);
 use IO::Select;
 use IO::Socket;
@@ -39,7 +21,9 @@ use parent qw(Class::Accessor);
 __PACKAGE__->follow_best_practice;
 __PACKAGE__->mk_accessors(
     qw(out_callback err_callback buffer_output select_timeout buffer_size input_buffer));
-__PACKAGE__->mk_ro_accessors(qw(pid last_command));
+__PACKAGE__->mk_ro_accessors(qw(pid last_command last_exit_code));
+
+our @EXPORT_OK = qw(safe_open3);
 
 my $logger;
 eval {
@@ -47,26 +31,72 @@ eval {
     $logger = Log::Log4perl->get_logger('IPC::Open3::Callback');
 };
 if ($@) {
-    $logger = IPC::Open3::Callback::NullLogger->new();
+    require IPC::Open3::Callback::Logger;
+    $logger = IPC::Open3::Callback::Logger->get_logger();
 }
 
 sub new {
-    my $prototype = shift;
-    my $class = ref($prototype) || $prototype;
+    my ( $class, @args ) = @_;
+    return bless( {}, $class )->_init(@args);
+}
 
-    my $self = {
-        buffer_output  => undef,
-        buffer_size    => undef,
-        err_callback   => undef,
-        input_buffer   => undef,
-        last_command   => undef,
-        out_callback   => undef,
-        pid            => undef,
-        select_timeout => undef,
-    };
-    bless( $self, $class );
+sub _append_to_buffer {
+    my ( $self, $buffer_ref, $data, $flush ) = @_;
 
-    my $args_ref = shift;
+    my @lines = split( /\n/, $$buffer_ref . $data, -1 );
+
+    # save the last line in the buffer as it may not yet be a complete line
+    $$buffer_ref = $flush ? '' : pop(@lines);
+
+    # return all complete lines
+    return @lines;
+}
+
+sub _clear_input_buffer {
+    my ($self) = shift;
+    delete( $self->{input_buffer} );
+}
+
+sub DESTROY {
+    my ($self) = shift;
+    $self->_destroy_child();
+}
+
+sub _destroy_child {
+    my $self = shift;
+
+    my $pid = $self->get_pid();
+    if ($pid) {
+        waitpid( $pid, 0 );
+        $self->_set_last_exit_code( $? >> 8 );
+
+        $logger->debug(
+            sub {
+                "Exited '",
+                    $self->get_last_command(),
+                    "' with code ",
+                    $self->get_last_exit_code();
+            }
+        );
+        $self->_set_pid();
+    }
+
+    return $self->{last_exit_code};
+}
+
+sub _init {
+    my ( $self, $args_ref ) = @_;
+
+    $self->{buffer_output}  = undef;
+    $self->{buffer_size}    = undef;
+    $self->{err_callback}   = undef;
+    $self->{input_buffer}   = undef;
+    $self->{last_command}   = undef;
+    $self->{last_exit_code} = undef;
+    $self->{out_callback}   = undef;
+    $self->{pid}            = undef;
+    $self->{select_timeout} = undef;
+    lock_keys( %{$self} );
 
     if ( defined($args_ref) ) {
         $logger->logdie('parameters must be an hash reference')
@@ -80,63 +110,37 @@ sub new {
     else {
         $self->{select_timeout} = 3;
         $self->{buffer_size}    = 1024;
-
     }
-
-    lock_keys( %{$self} );
 
     return $self;
 }
 
-sub _append_to_buffer {
-    my $self       = shift;
-    my $buffer_ref = shift;
-    my $data       = $$buffer_ref . shift;
-    my $flush      = shift;
-
-    my @lines = split( /\n/, $data, -1 );
-
-    # save the last line in the buffer as it may not yet be a complete line
-    $$buffer_ref = $flush ? '' : pop(@lines);
-
-    # return all complete lines
-    return @lines;
-}
-
-sub _clear_input_buffer {
-    my $self = shift;
-    delete( $self->{input_buffer} );
-}
-
-sub DESTROY {
-    my $self = shift;
-    $self->_destroy_child();
-}
-
-sub _destroy_child {
-    my $self = shift;
-
-    waitpid( $self->get_pid(), 0 ) if ( $self->get_pid() );
-    my $exit_code = $? >> 8;
-
-    $logger->debug( "exited '", $self->get_last_command() || '', "' with code ", $exit_code );
-    $self->_set_pid();
-    return $exit_code;
-}
-
 sub _nix_open3 {
-    my @command = @_;
+    my ( $in_read, $out_write, $err_write, @command ) = @_;
+    my ( $in_write, $out_read, $err_read );
 
-    my ( $in_fh, $out_fh, $err_fh ) = ( gensym(), gensym(), gensym() );
-    return ( open3( $in_fh, $out_fh, $err_fh, @command ), $in_fh, $out_fh, $err_fh );
+    if ( !$in_read ) {
+        $in_read  = gensym();
+        $in_write = $in_read;
+    }
+    if ( !$out_write ) {
+        $out_read  = gensym();
+        $out_write = $out_read;
+    }
+    if ( !$err_write ) {
+        $err_read  = gensym();
+        $err_write = $err_read;
+    }
+
+    return ( open3( $in_read, $out_write, $err_write, @command ),
+        $in_write, $out_read, $err_read );
 }
 
 sub run_command {
-    my $self    = shift;
-    my @command = @_;
-    my $options = {};
+    my ( $self, @command ) = @_;
 
     # if last arg is hashref, its command options not arg...
+    my $options = {};
     if ( ref( $command[-1] ) eq 'HASH' ) {
         $options = pop(@command);
     }
@@ -147,20 +151,25 @@ sub run_command {
     $out_callback = $options->{out_callback} || $self->get_out_callback();
     $err_callback = $options->{err_callback} || $self->get_err_callback();
     if ( $options->{buffer_output} || $self->get_buffer_output() ) {
-        $out_buffer_ref = \'';
-        $err_buffer_ref = \'';
+        my $out_temp = '';
+        my $err_temp = '';
+        $out_buffer_ref = \$out_temp;
+        $err_buffer_ref = \$err_temp;
     }
     $buffer_size    = $options->{buffer_size}    || $self->get_buffer_size();
     $select_timeout = $options->{select_timeout} || $self->get_select_timeout();
 
     $self->_set_last_command( \@command );
     $logger->debug( "Running '", $self->get_last_command(), "'" );
-    my ( $pid, $in_fh, $out_fh, $err_fh ) = safe_open3(@command);
+    my ( $pid, $in_fh, $out_fh, $err_fh ) = safe_open3_with(
+        $options->{in_handle},
+        $options->{out_handle},
+        $options->{err_handle}, @command
+    );
     $self->_set_pid($pid);
 
     my $select = IO::Select->new();
     $select->add( $out_fh, $err_fh );
-
     while ( my @ready = $select->can_read($select_timeout) ) {
         if ( $self->get_input_buffer() ) {
             syswrite( $in_fh, $self->get_input_buffer() );
@@ -194,21 +203,32 @@ sub run_command {
     # flush buffers
     $self->_write_to_callback( $out_callback, '', $out_buffer_ref, 1 );
     $self->_write_to_callback( $err_callback, '', $err_buffer_ref, 1 );
+
     return $self->_destroy_child();
 }
 
 sub safe_open3 {
-    return ( $^O =~ /MSWin32/ ) ? _win_open3(@_) : _nix_open3(@_);
+    return safe_open3_with( undef, undef, undef, @_ );
+}
+
+sub safe_open3_with {
+    my ( $in_handle, $out_handle, $err_handle, @command ) = @_;
+
+    my @args = (
+        $in_handle  ? '<&' . fileno($in_handle)  : undef,
+        $out_handle ? '>&' . fileno($out_handle) : undef,
+        $err_handle ? '>&' . fileno($err_handle) : undef, @command
+    );
+    return ( $^O =~ /MSWin32/ ) ? _win_open3(@args) : _nix_open3(@args);
 }
 
 sub send_input {
-    my $self = shift;
+    my ($self) = @_;
     $self->set_input_buffer(shift);
 }
 
 sub _set_last_command {
-    my $self        = shift;
-    my $command_ref = shift;    #array ref
+    my ( $self, $command_ref ) = @_;
 
     $logger->logdie('the command parameter must be an array reference')
         unless ( ( ref($command_ref) ) eq 'ARRAY' );
@@ -216,35 +236,47 @@ sub _set_last_command {
     $self->{last_command} = join( ' ', @{$command_ref} );
 }
 
-sub _set_pid {
-    my $self  = shift;
-    my $value = shift;
+sub _set_last_exit_code {
+    my ( $self, $code ) = @_;
+    $self->{last_exit_code} = $code;
+}
 
-    if ( !defined($value) ) {
+sub _set_pid {
+    my ( $self, $pid ) = @_;
+
+    if ( !defined($pid) ) {
         delete( $self->{pid} );
     }
-    elsif ( $value !~ /^\d+$/ ) {
+    elsif ( $pid !~ /^\d+$/ ) {
         $logger->logdie('the parameter must be an integer');
     }
     else {
-        $self->{pid} = $value;
+        $self->{pid} = $pid;
     }
 }
 
 sub _win_open3 {
-    my @command = @_;
+    my ( $in_read, $out_write, $err_write, @command ) = @_;
 
-    my ( $in_read,  $in_write )  = _win_pipe();
-    my ( $out_read, $out_write ) = _win_pipe();
-    my ( $err_read, $err_write ) = _win_pipe();
-
-    my $pid = open3(
-        '>&' . fileno($in_read),
-        '<&' . fileno($out_write),
-        '<&' . fileno($err_write), @command
+    my ($in_pipe_read,   $in_pipe_write, $out_pipe_read,
+        $out_pipe_write, $err_pipe_read, $err_pipe_write
     );
+    if ( !$in_read ) {
+        ( $in_pipe_read, $in_pipe_write ) = _win_pipe();
+        $in_read = '>&' . fileno($in_pipe_read);
+    }
+    if ( !$out_write ) {
+        ( $out_pipe_read, $out_pipe_write ) = _win_pipe();
+        $out_write = '<&' . fileno($out_pipe_write);
+    }
+    if ( !$err_write ) {
+        ( $err_pipe_read, $err_pipe_write ) = _win_pipe();
+        $err_write = '<&' . fileno($err_pipe_write);
+    }
 
-    return ( $pid, $in_write, $out_read, $err_read );
+    my $pid = open3( $in_read, $out_write, $err_write, @command );
+
+    return ( $pid, $in_pipe_write, $out_pipe_read, $err_pipe_read );
 }
 
 sub _win_pipe {
@@ -256,12 +288,7 @@ sub _win_pipe {
 }
 
 sub _write_to_callback {
-
-    my $self       = shift;
-    my $callback   = shift;
-    my $data       = shift;
-    my $buffer_ref = shift;
-    my $flush      = shift;
+    my ( $self, $callback, $data, $buffer_ref, $flush ) = @_;
 
     return if ( !defined($callback) );
 
@@ -285,7 +312,7 @@ IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to 
 
 =head1 VERSION
 
-version 1.09
+version 1.10
 
 =head1 SYNOPSIS
 
@@ -375,6 +402,17 @@ This method works for both *nix and Microsoft Windows OS's.  On a Windows
 system, it will use sockets per 
 L<http://www.perlmonks.org/index.pl?node_id=811150>.
 
+=head2 safe_open3_with( $in_handle, $out_handle, $err_handle, $command, $arg1, ..., $argN )
+
+The same as L<safe_open3|/"safe_open3( $command, $arg1, ..., $argN )"> except
+that you can specify the handles to be used instead of having C<safe_open3>
+generate them.  Each handle can be C<undef>.  In fact, C<safe_open3> just
+calls C<safe_open3_with(undef, undef, undef, @command)>.  The return values
+are the same except that C<undef> will be returned for each handle 
+corresponding to the same stream as a supplied handle.  For example, if you
+specify an C<$out_handle> then C<undef> will be returned for the C<STDOUT>
+handle.
+
 =head1 CONSTRUCTORS
 
 =head2 new( \%options )
@@ -438,6 +476,11 @@ L<out_callback|/"set_out_callback( &subroutine )">.
 The last command run by the 
 L<run_command|/"run_command( $command, $arg1, ..., $argN, \%options )"> method.
 
+=head2 get_last_exit_code()
+
+The exit code of the last command run by the 
+L<run_command|/"run_command( $command, $arg1, ..., $argN, \%options )"> method.
+
 =head2 get_out_callback()
 
 =head2 set_out_callback( &subroutine )
@@ -482,7 +525,28 @@ If the last argument to this method is a hashref (C<ref(@_[-1]) eq 'HASH'>), the
 it is treated as an options hash.  The supported allowed options are the same
 as the L<constructor|/"new( \%options )"> and will be used in preference to the values set by the  
 constructor or any of the setters.  These options will be used for this single
-call, and will not modify the C<Callback> object itself.
+call, and will not modify the C<Callback> object itself.  C<run_command> supports
+three additional options not supported by the constructor.  They are:
+
+=over 4
+
+=item in_handle 
+
+An C<IO::Handle> from which C<STDIN> will be read.
+
+=item out_handle
+
+An C<IO::Handle> to which C<STDOUT> will be written.
+
+=item err_handle
+
+An C<IO::Handle> to which C<STDERR> will be written.
+
+=back
+
+These handle options can be mixed with regular options and if multiple are
+specified on the same stream, the handle version will be used instead of the
+callback.
 
 Returns the exit code from the command.
 
