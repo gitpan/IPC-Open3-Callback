@@ -5,17 +5,17 @@ author:
   - 'Alceu Rodrigues de Freitas Junior <arfreitas@cpan.org>'
 build_requires: {}
 configure_requires:
-  ExtUtils::MakeMaker: 6.30
+  ExtUtils::MakeMaker: '6.30'
 dynamic_config: 0
-generated_by: 'Dist::Zilla version 5.005, CPAN::Meta::Converter version 2.132830'
+generated_by: 'Dist::Zilla version 5.016, CPAN::Meta::Converter version 2.141170'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
-  version: 1.4
+  version: '1.4'
 name: IPC-Open3-Callback
 requires:
-  IPC::Open3: 0
+  IPC::Open3: '0'
 resources:
   homepage: https://github.com/lucastheisen/ipc-open3-callback
   repository: https://github.com/lucastheisen/ipc-open3-callback.git
-version: 1.10
+version: '1.11'

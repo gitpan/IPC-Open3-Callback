@@ -2,10 +2,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::Logger;
-{
-  $IPC::Open3::Callback::Logger::VERSION = '1.10';
-}
-
+$IPC::Open3::Callback::Logger::VERSION = '1.11';
 # ABSTRACT: A logger for when Log4perl is not available
 # PODNAME: IPC::Open3::Callback::Logger
 
@@ -101,7 +98,7 @@ IPC::Open3::Callback::Logger - A logger for when Log4perl is not available
 
 =head1 VERSION
 
-version 1.10
+version 1.11
 
 =head1 SYNOPSIS
 
@@ -117,6 +114,25 @@ version 1.10
 =head1 DESCRIPTION
 
 This provides a very basic logger for when Log4perl is not available.
+
+=head1 METHODS
+
+=head2 get_logger()
+
+Returns the logger instance.
+
+=head2 set_level( $level )
+
+Sets the log level to one of:
+
+  all
+  trace
+  debug
+  info
+  warn
+  error
+  fatal
+  off
 
 =head1 AUTHORS
 

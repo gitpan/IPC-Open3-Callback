@@ -4,10 +4,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::Command;
-{
-  $IPC::Open3::Callback::Command::VERSION = '1.10';
-}
-
+$IPC::Open3::Callback::Command::VERSION = '1.11';
 # ABSTRACT: A utility class that provides subroutines for building shell command strings.
 
 use Exporter qw(import);
@@ -17,9 +14,17 @@ our @EXPORT_OK =
 use File::Spec;
 
 sub batch_command {
+    my ( @commands, $batch_options, $command_options );
+    (@commands) = @_;
+    $command_options = pop(@commands)
+        if ( ref( $commands[$#commands] ) eq 'IPC::Open3::Callback::Command::CommandOptions' );
+    $batch_options = pop(@commands) if ( ref( $commands[$#commands] ) eq 'HASH' );
+
+    push( @commands, $command_options ) if ($command_options);
+
     wrap(
-        {},
-        @_,
+        $batch_options || {},
+        @commands,
         sub {
             return @_;
         }
@@ -51,18 +56,23 @@ sub cp_command {
         if ( ref( $_[0] ) eq 'IPC::Open3::Callback::Command::CommandOptions' );
     %cp_options = @_;
 
+    $source_command_options      = command_options() if ( !$source_command_options );
+    $destination_command_options = command_options() if ( !$destination_command_options );
+
     my $source_command;
     my $destination_command;
     if ( $cp_options{file} ) {
 
         # is a file, so use cat | dd
         if ( $cp_options{compress} ) {
-            $source_command = "gzip -c $source_path";
-            $destination_command = pipe_command( "gunzip", "dd of=$destination_path" );
+            $source_command = command( "gzip -c $source_path", $source_command_options );
+            $destination_command =
+                pipe_command( "gunzip", "dd of=$destination_path", $destination_command_options );
         }
         else {
-            $source_command      = "cat $source_path";
-            $destination_command = "dd of=$destination_path";
+            $source_command = command( "cat $source_path", $source_command_options );
+            $destination_command =
+                command( "dd of=$destination_path", $destination_command_options );
         }
     }
     else {
@@ -70,31 +80,29 @@ sub cp_command {
         if ( $cp_options{archive} && $cp_options{archive} eq 'zip' ) {
             my $temp_zip = File::Spec->catfile( $destination_path,
                 $cp_options{unzip_temp_file} || "temp_cp_command.zip" );
-            $source_command      = "bash -c \"cd $source_path;zip -qr - .\"";
+            $source_command = batch_command(
+                "cd $source_path",
+                "zip -qr - .", { subshell => "bash -c " },
+                $source_command_options
+            );
             $destination_command = batch_command(
-                "dd of=$temp_zip",
-                "unzip -qod $destination_path $temp_zip",
-                rm_command($temp_zip)
+                "dd of=$temp_zip",     "unzip -qod $destination_path $temp_zip",
+                rm_command($temp_zip), $destination_command_options
             );
         }
         else {
             # default, use tar
             if ( $cp_options{compress} ) {
-                $source_command      = "tar cz -C $source_path .";
-                $destination_command = "tar xz -C $destination_path";
+                $source_command = command( "tar cz -C $source_path .", $source_command_options );
+                $destination_command =
+                    command( "tar xz -C $destination_path", $destination_command_options );
             }
             else {
-                $source_command      = "tar c -C $source_path .";
-                $destination_command = "tar x -C $destination_path";
+                $source_command = command( "tar c -C $source_path .", $source_command_options );
+                $destination_command =
+                    command( "tar x -C $destination_path", $destination_command_options );
             }
         }
-    }
-
-    if ($source_command_options) {
-        $source_command = command( $source_command, $source_command_options );
-    }
-    if ($destination_command_options) {
-        $destination_command = command( $destination_command, $destination_command_options );
     }
 
     return pipe_command( $source_command, $destination_command );
@@ -181,11 +189,9 @@ sub sed_command {
 }
 
 sub write_command {
-
-    # ($filename, @lines, [\%write_options], [$command_options])
-    my $filename = shift;
-    my @lines    = @_;
-    my ( $command_options, $write_options );
+    my ( $filename, @lines, $write_options, $command_options );
+    $filename        = shift;
+    @lines           = @_;
     $command_options = pop(@lines)
         if ( ref( $lines[$#lines] ) eq 'IPC::Open3::Callback::Command::CommandOptions' );
     $write_options = pop(@lines) if ( ref( $lines[$#lines] ) eq 'HASH' );
@@ -240,16 +246,19 @@ sub wrap {
                     $destination_command .= "\n";
                 }
             }
+
             $command =~ s/^(.*?[^\\]);$/$1/;    # from find -exec
+
+            if ( defined($sudo_username) ) {
+                $command = "sudo " . ( $sudo_username ? "-u $sudo_username " : '' ) . $command;
+            }
+
             $destination_command .= $command;
         }
     }
 
-    if ( defined($sudo_username) ) {
-        $destination_command = "sudo "
-            . ( $sudo_username ? "-u $sudo_username " : '' )
-            . "bash -c "
-            . _quote_command($destination_command);
+    if ( $wrap_options->{subshell} ) {
+        $destination_command = $wrap_options->{subshell} . _quote_command($destination_command);
     }
 
     if ( !defined($username) && !defined($hostname) ) {
@@ -268,10 +277,7 @@ sub wrap {
 }
 
 package IPC::Open3::Callback::Command::CommandOptions;
-{
-  $IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.10';
-}
-
+$IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.11';
 use parent qw(Class::Accessor);
 __PACKAGE__->follow_best_practice;
 __PACKAGE__->mk_accessors(qw(hostname pretty ssh sudo_username username));
@@ -305,7 +311,7 @@ IPC::Open3::Callback::Command - A utility class that provides subroutines for bu
 
 =head1 VERSION
 
-version 1.10
+version 1.11
 
 =head1 SYNOPSIS
 
@@ -327,8 +333,8 @@ version 1.10
   # ssh baz "cd foo;cd bar"
   $command = batch_command( 'cd foo', 'cd bar', command_options( hostname=>'baz' ) ); 
   
-  # ssh baz "sudo bash -c \"cd foo;cd bar\""
-  $command = batch_command( 'cd foo', 'cd bar', command_options( hostname=>'baz',sudo_username=>'' ) ); 
+  # ssh baz "bash -c \"sudo cd foo;sudo cd bar\""
+  $command = batch_command( 'cd foo', 'cd bar', {subshell => 'bash -c' }, command_options( hostname=>'baz',sudo_username=>'' ) ); 
   
   # ssh baz "mkdir -p \"foo\" \"bar\""
   $command = mkdir_command( 'foo', 'bar', command_options( hostname=>'baz' ) ); 
@@ -339,14 +345,14 @@ version 1.10
           command( 'dd of=def', command_options( hostname=>'baz' ) ) 
       ); 
 
-  # ssh fred@baz "sudo -u joe \"rm -rf \\\\"foo\\\\" \\\\"bar\\\\"\""
+  # ssh fred@baz "sudo -u joe rm -rf \"foo\" \"bar\""
   $command = rm_command( 'foo', 'bar', command_options( username=>'fred',hostname=>'baz',sudo_username=>'joe' ) ); 
   
   # sed -e 's/foo/bar/'
   $command = sed_command( 's/foo/bar/' ); 
   
   
-  # curl http://www.google.com|sed -e \'s/google/gaggle/g\'|ssh fred@baz "sudo -u joe bash -c \"dd of=\\\\\\"/tmp/gaggle.com\\\\\\"\"";ssh fred@baz "sudo -u joe bash -c \"rm -rf \\\\\\"/tmp/google.com\\\\\\"\"";
+  # curl http://www.google.com|sed -e \'s/google/gaggle/g\'|ssh fred@baz "sudo -u joe dd of=\"/tmp/gaggle.com\"";ssh fred@baz "sudo -u joe rm -rf \"/tmp/google.com\"";
   my $command_options = command_options( username=>'fred',hostname=>'baz',sudo_username=>'joe' );
   $command = batch_command(
           pipe_command( 
@@ -373,10 +379,18 @@ hash defining who/where/how to run the command.
 
 =head1 FUNCTIONS
 
-=head2 batch_command( $command1, $command2, ..., $commandN, [$command_options] )
+=head2 batch_command( $command1, $command2, ..., $commandN, [\%batch_options], [$command_options] )
 
 This will join all the commands with a C<;> and apply the supplied 
-C<command_options> to the result.
+C<command_options> to the result.  The supported C<batch_options> are:
+
+=over 4
+
+=item subshell
+
+The subshell to run the commands under, must end with C<-c>. (ex: C<'bash -c'>)
+
+=back
 
 =head2 command( $command, [$command_options] )
 
@@ -531,9 +545,21 @@ issued on the console, they might show up in the command history...
 
 =back
 
-=head2 write_command( $out_file, @lines, [$command_options] )
+=head2 write_command( $filename, @lines, [\%write_options], [$command_options])
 
-Writes the C<@lines> to C<$out_file> with the C<$command_options> applied.
+Will write C<@lines> to C<$filename>.  The supported write options are:
+
+=over 4
+
+=item mode
+
+The file mode to set for C<$filename>.
+
+=item line_separator
+
+The the separator to use between lines (default: C<\n>).
+
+=back
 
 =head1 AUTHORS
 
