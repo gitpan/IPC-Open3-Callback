@@ -2,7 +2,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback;
-$IPC::Open3::Callback::VERSION = '1.11';
+$IPC::Open3::Callback::VERSION = '1.12';
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 # PODNAME: IPC::Open3::Callback
 
@@ -184,10 +184,10 @@ sub run_command {
                 next;
             }
             else {
-                if ( $fh == $out_fh ) {
+                if ( $out_fh && $fh == $out_fh ) {
                     $self->_write_to_callback( $out_callback, $line, $out_buffer_ref, 0 );
                 }
-                elsif ( $fh == $err_fh ) {
+                elsif ( $err_fh && $fh == $err_fh ) {
                     $self->_write_to_callback( $err_callback, $line, $err_buffer_ref, 0 );
                 }
                 else {
@@ -309,7 +309,7 @@ IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to 
 
 =head1 VERSION
 
-version 1.11
+version 1.12
 
 =head1 SYNOPSIS
 
