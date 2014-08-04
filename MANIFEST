@@ -9,6 +9,7 @@ README
 dist.ini
 lib/IPC/Open3/Callback.pm
 lib/IPC/Open3/Callback/Command.pm
+lib/IPC/Open3/Callback/CommandFailedException.pm
 lib/IPC/Open3/Callback/CommandRunner.pm
 lib/IPC/Open3/Callback/Logger.pm
 t/Callback.t
