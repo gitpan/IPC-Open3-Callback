@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 32;
+use Test::More tests => 33;
 
 BEGIN { use_ok('IPC::Open3::Callback::Command') }
 
@@ -150,7 +150,7 @@ is( cp_command(
         compress => 1
     ),
     'ssh foo "gzip -c abc"|ssh bar "gunzip|dd of=def"',
-    'cp_command file source and destination command options'
+    'cp_command file source and destination command options compressed'
 );
 is( cp_command( "abc", "def" ), 'tar c -C abc .|tar x -C def', 'directory cp_command simple' );
 is( cp_command( "abc", command_options( hostname => 'foo', sudo_username => 'foo_user' ), "def" ),
@@ -170,8 +170,17 @@ is( cp_command(
         command_options( hostname => 'bar', sudo_username => 'bar_user' ),
         compress => 1
     ),
-    'ssh foo "sudo -u foo_user tar cz -C abc ."|ssh bar "sudo -u bar_user tar xz -C def"',
+    'ssh foo "sudo -u foo_user tar c -C abc .|gzip"|ssh bar "gunzip|sudo -u bar_user tar x -C def"',
     'directory compress cp_command source and destination options'
+);
+is( cp_command(
+        "abc", command_options( hostname => 'foo', sudo_username => 'foo_user' ),
+        "def", command_options( hostname => 'bar', sudo_username => 'bar_user' ),
+        compress => 1,
+        status   => 1
+    ),
+    'ssh foo "sudo -u foo_user tar c -C abc .|pv -f -s \`sudo -u foo_user du -sb abc|cut -f1\`|gzip"|ssh bar "gunzip|sudo -u bar_user tar x -C def"',
+    'directory compress cp_command source and destination options with status'
 );
 is( cp_command( "abc", "def", archive => 'zip' ),
     'bash -c "cd abc;zip -qr - ."|dd of=def/temp_cp_command.zip;unzip -qod def def/temp_cp_command.zip;rm -rf "def/temp_cp_command.zip"',
@@ -184,5 +193,5 @@ is( cp_command(
         archive => 'zip'
     ),
     'ssh foo "bash -c \"sudo -u foo_user cd abc;sudo -u foo_user zip -qr - .\""|ssh bar "sudo -u bar_user dd of=def/temp_cp_command.zip;sudo -u bar_user unzip -qod def def/temp_cp_command.zip;sudo -u bar_user rm -rf \"def/temp_cp_command.zip\""',
-    'directory unzip cp_command simple'
+    'directory unzip cp_command with command options'
 );

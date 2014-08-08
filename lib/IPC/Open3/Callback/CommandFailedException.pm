@@ -2,7 +2,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::CommandFailedException;
-$IPC::Open3::Callback::CommandFailedException::VERSION = '1.13';
+$IPC::Open3::Callback::CommandFailedException::VERSION = '1.14';
 # ABSTRACT: An exception thrown when run_or_die encounters a failed command
 # PODNAME: IPC::Open3::Callback::CommandFailedException
 
@@ -54,7 +54,7 @@ IPC::Open3::Callback::CommandFailedException - An exception thrown when run_or_d
 
 =head1 VERSION
 
-version 1.13
+version 1.14
 
 =head1 SYNOPSIS
 
