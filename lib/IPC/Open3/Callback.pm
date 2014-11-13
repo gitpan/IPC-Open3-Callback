@@ -2,7 +2,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback;
-$IPC::Open3::Callback::VERSION = '1.14';
+$IPC::Open3::Callback::VERSION = '1.15';
 # ABSTRACT: An extension to IPC::Open3 that will feed out and err to callbacks instead of requiring the caller to handle them.
 # PODNAME: IPC::Open3::Callback
 
@@ -309,7 +309,7 @@ IPC::Open3::Callback - An extension to IPC::Open3 that will feed out and err to 
 
 =head1 VERSION
 
-version 1.14
+version 1.15
 
 =head1 SYNOPSIS
 

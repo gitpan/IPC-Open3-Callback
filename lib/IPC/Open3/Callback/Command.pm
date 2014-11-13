@@ -2,7 +2,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::Command;
-$IPC::Open3::Callback::Command::VERSION = '1.14';
+$IPC::Open3::Callback::Command::VERSION = '1.15';
 # ABSTRACT: A utility class that provides subroutines for building shell command strings.
 
 use Exporter qw(import);
@@ -78,11 +78,10 @@ sub cp_command {
         if ( $cp_options{archive} && $cp_options{archive} eq 'zip' ) {
             my $temp_zip = File::Spec->catfile( $destination_path,
                 $cp_options{unzip_temp_file} || "temp_cp_command.zip" );
-            $source_command = batch_command(
-                "cd $source_path",
-                "zip -qr - .", { subshell => "bash -c " },
-                $source_command_options
-            );
+            $source_command =
+                command(
+                batch_command( "cd $source_path", "zip -qr - .", { subshell => "bash -c " } ),
+                $source_command_options );
             $destination_command = batch_command(
                 "dd of=$temp_zip",     "unzip -qod $destination_path $temp_zip",
                 rm_command($temp_zip), $destination_command_options
@@ -304,7 +303,7 @@ sub wrap {
 }
 
 package IPC::Open3::Callback::Command::CommandOptions;
-$IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.14';
+$IPC::Open3::Callback::Command::CommandOptions::VERSION = '1.15';
 use parent qw(Class::Accessor);
 __PACKAGE__->follow_best_practice;
 __PACKAGE__->mk_ro_accessors(qw(hostname pretty ssh sudo_username username));
@@ -358,7 +357,7 @@ IPC::Open3::Callback::Command - A utility class that provides subroutines for bu
 
 =head1 VERSION
 
-version 1.14
+version 1.15
 
 =head1 SYNOPSIS
 

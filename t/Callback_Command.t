@@ -192,6 +192,6 @@ is( cp_command(
         command_options( hostname => 'bar', sudo_username => 'bar_user' ),
         archive => 'zip'
     ),
-    'ssh foo "bash -c \"sudo -u foo_user cd abc;sudo -u foo_user zip -qr - .\""|ssh bar "sudo -u bar_user dd of=def/temp_cp_command.zip;sudo -u bar_user unzip -qod def def/temp_cp_command.zip;sudo -u bar_user rm -rf \"def/temp_cp_command.zip\""',
+    'ssh foo "sudo -u foo_user bash -c \"cd abc;zip -qr - .\""|ssh bar "sudo -u bar_user dd of=def/temp_cp_command.zip;sudo -u bar_user unzip -qod def def/temp_cp_command.zip;sudo -u bar_user rm -rf \"def/temp_cp_command.zip\""',
     'directory unzip cp_command with command options'
 );

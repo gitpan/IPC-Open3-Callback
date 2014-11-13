@@ -2,7 +2,7 @@ use strict;
 use warnings;
 
 package IPC::Open3::Callback::Logger;
-$IPC::Open3::Callback::Logger::VERSION = '1.14';
+$IPC::Open3::Callback::Logger::VERSION = '1.15';
 # ABSTRACT: A logger for when Log4perl is not available
 # PODNAME: IPC::Open3::Callback::Logger
 
@@ -98,7 +98,7 @@ IPC::Open3::Callback::Logger - A logger for when Log4perl is not available
 
 =head1 VERSION
 
-version 1.14
+version 1.15
 
 =head1 SYNOPSIS
 
